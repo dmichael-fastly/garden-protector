@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Gadgets</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    /* box-sizing + body type + base reset come from gp.css (shared primitives).
+       Header chrome (brand, garden name, nav, status pill, Pi CPU/RAM, tz + theme)
+       and ALL its CSS come from the shared partial + gp.css — single source of truth.
+       Buttons/inputs/selects/checkboxes/ranges use DaisyUI (app.css); only the
+       page's BESPOKE component classes are styled below, reskinned on the shared tokens. */
+    main { max-width: var(--page-wide); margin: 0 auto; padding: 28px 18px 80px; }
+    .row-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+    .row-top .left { display: flex; align-items: center; gap: 10px; }
+    h2 { font-size: 20px; margin: 30px 0 4px; font-weight: 700; letter-spacing: -0.2px; }
+    .sub { color: var(--muted); font-size: 14px; margin: 0 0 14px; max-width: 62ch; }
+
+    /* info "i" pill — opens the help modal at a section (bespoke). */
+    .info { display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px;
+      border-radius: 50%; border: 1px solid var(--hairline); background: var(--panel-2); color: var(--muted);
+      font-size: 12px; font-weight: 700; font-style: normal; cursor: pointer; vertical-align: middle;
+      line-height: 1; padding: 0; transition: color .12s ease, border-color .12s ease; }
+    .info:hover { color: var(--blue); border-color: var(--blue); }
+
+    /* call-out banner (get-started / notices) — bespoke, reskinned on tokens. */
+    .callout { display: flex; gap: 12px; align-items: flex-start; background: var(--panel-2);
+      border: 1px solid var(--hairline); border-left: 3px solid var(--blue); border-radius: var(--radius-md);
+      padding: 14px 16px; margin: 6px 0 22px; font-size: 14.5px; box-shadow: var(--shadow-1); }
+    .callout .ic { display: inline-flex; line-height: 1; }
+    .callout .ic .gp-ic { width: 22px; height: 22px; }
+    .callout .ct { flex: 1; } .callout b { font-weight: 650; }
+    .callout.ok { border-left-color: var(--green); }
+
+    /* device card (bespoke; built in page JS — reskinned, not converted to DaisyUI .card). */
+    .dev { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-md);
+      padding: 18px; margin-top: 14px; box-shadow: var(--shadow-1); }
+    .dev.reg { border-color: color-mix(in srgb, var(--green) 50%, var(--hairline)); }
+    .dev-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: relative; }
+    .dev-ic { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+      border-radius: var(--radius-sm); background: var(--panel-2); border: 1px solid var(--hairline); }
+    .dev-ic .gp-ic { width: 19px; height: 19px; }
+    .dev-head .name { font-weight: 650; font-size: 16px; }
+    /* in-card chip (NOT the gp.css metric tile / DaisyUI badge — bespoke kind label). */
+    .badge { font-size: 12px; color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent); padding: 2px 10px;
+      border-radius: var(--radius-pill); font-weight: 600; line-height: 1.5; }
+    .badge.ok { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent);
+      border-color: color-mix(in srgb, var(--green) 35%, transparent); }
+    .meta { color: var(--muted); font-size: 13.5px; margin: 8px 0 0 46px; word-break: break-word; }
+    .meta .raw { cursor: help; border-bottom: 1px dotted var(--hairline); }
+
+    /* registered ("in your garden") gadget — status pill + live camera view. */
+    .status-pill { margin-left: auto; font-size: 12px; font-weight: 600; padding: 3px 11px; border-radius: var(--radius-pill);
+      white-space: nowrap; border: 1px solid var(--hairline); color: var(--muted); background: var(--panel-2); }
+    .status-pill.on  { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+    .status-pill.off { color: var(--red);   background: transparent; border-color: color-mix(in srgb, var(--red) 50%, transparent); }
+    .status-pill.idle{ color: var(--amber); background: transparent; border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
+    .cam { margin: 14px 0 0 46px; max-width: 440px; }
+    .cam .frame { position: relative; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--hairline);
+      background: #000; aspect-ratio: 4 / 3; box-shadow: var(--shadow-1); }
+    .cam .snap { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+    .cam .snap-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; text-align: center; padding: 16px; color: var(--muted); font-size: 13px; background: var(--panel-2); }
+    .cam .snap-empty .gp-ic { width: 26px; height: 26px; opacity: .7; }
+    .cam .live { position: absolute; top: 8px; left: 8px; display: none; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 700; letter-spacing: .4px; color: #fff; background: rgba(214,67,59,.92); padding: 3px 9px; border-radius: var(--radius-pill); }
+    .cam .live.show { display: inline-flex; }
+    .cam .live .dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+    .cam .event { margin-top: 8px; font-size: 13px; color: var(--muted); min-height: 16px; display: flex; align-items: center; gap: 6px; }
+
+    /* full-size image viewer (bespoke overlay; scrim reads in both themes). */
+    .img-back { position: fixed; inset: 0; background: var(--scrim-strong); display: none; z-index: 60;
+      align-items: center; justify-content: center; padding: 24px; flex-direction: column; gap: 12px; cursor: zoom-out; }
+    .img-back.show { display: flex; }
+    .img-back img { max-width: 96vw; max-height: 84vh; border-radius: var(--radius-md); box-shadow: var(--shadow-overlay); }
+    .img-back .cap { color: var(--scrim-ink); font-size: 14px; font-weight: 600; }
+
+    /* onboarding control grid — labels above DaisyUI .input/.select. */
+    .controls { display: grid; grid-template-columns: 1.5fr 1fr 1fr auto; gap: 12px; margin-top: 16px; align-items: end; }
+    @media (max-width: 640px) { .controls { grid-template-columns: 1fr 1fr; } }
+    .controls .f-go { align-self: end; }
+    label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; font-weight: 600; }
+
+    /* streamed-op log console (bespoke terminal surface). */
+    .log { display: none; background: var(--code-bg); color: var(--muted); border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+      padding: 10px 12px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55;
+      max-height: 200px; overflow: auto; margin-top: 14px; white-space: pre-wrap; }
+    .log.show { display: block; } .log .l-cmd { color: var(--blue-ink); } .log .l-warn { color: var(--amber-ink); }
+    .log .l-error { color: var(--red-ink); } .log .l-ok { color: var(--green-ink); }
+
+    /* empty / error states. */
+    .empty { color: var(--muted); font-size: 14px; padding: 18px 16px; border: 1px dashed var(--hairline);
+      border-radius: var(--radius-md); margin-top: 14px; text-align: center; }
+    .err { color: var(--red-ink); font-size: 13.5px; min-height: 16px; }
+
+    /* per-card action buttons (bespoke compact icon buttons in the card head). */
+    .dev-actions { margin-left: 12px; display: flex; gap: 8px; }
+    .action-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; font: inherit; font-size: 13px;
+      line-height: 1.2; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid var(--hairline); font-weight: 600;
+      background: var(--panel-2); color: var(--text); transition: color .12s ease, border-color .12s ease, background .12s ease; }
+    .action-btn .gp-ic { width: 15px; height: 15px; }
+    .action-btn.edit-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .action-btn.remove-btn { border-color: color-mix(in srgb, var(--red) 40%, transparent); color: var(--red); background: transparent; }
+    .action-btn.remove-btn:hover { background: color-mix(in srgb, var(--red) 12%, transparent); border-color: var(--red); }
+
+    /* modal (bespoke overlay — distinct from gp.css .modal; toggled via .modal-back.show). */
+    .modal-back { position: fixed; inset: 0; background: var(--scrim); display: none;
+      align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+    .modal-back.show { display: flex; }
+    .modal { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-lg); width: 100%;
+      max-width: 580px; max-height: 86vh; overflow: auto; padding: 24px 26px; box-shadow: var(--shadow-overlay); }
+    .modal-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .modal h3 { margin: 0; font-size: 20px; font-weight: 700; }
+    .modal .x { display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2);
+      border: 1px solid var(--hairline); color: var(--text); cursor: pointer; width: 32px; height: 32px;
+      border-radius: var(--radius-sm); line-height: 1; transition: color .12s ease, border-color .12s ease; }
+    .modal .x:hover { color: var(--text); border-color: var(--muted); }
+    .modal h4 { margin: 22px 0 4px; font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+    .modal h4 .gi { display: inline-flex; color: var(--muted); }
+    .modal h4 .gi .gp-ic { width: 19px; height: 19px; }
+    .modal p { margin: 4px 0; color: var(--muted); font-size: 14px; }
+    .modal .glossary { display: grid; grid-template-columns: 30px 1fr; gap: 8px 10px; margin-top: 8px; }
+    .modal .glossary .gi { display: inline-flex; align-items: center; justify-content: center; }
+    .modal .glossary .gi .gp-ic { width: 20px; height: 20px; }
+    .modal .glossary .gt { font-size: 14px; }
+    .modal .glossary .gt b { color: var(--text); }
+    .modal .glossary .gt span { color: var(--muted); }
+    .modal .hl { background: color-mix(in srgb, var(--blue) 16%, transparent); border-radius: var(--radius-sm);
+      padding: 2px 6px; margin: 0 -6px; transition: background 1.2s ease; }
+
+    /* Responsive overrides (header chrome is handled by the shared partial). */
+    @media (max-width: 600px) {
+      main { padding: 18px 12px 56px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + all controls (status, Pi health, tz, theme) come from the shared header partial -->
+  </header>
+  <main>
+    <div class="row-top">
+      <div class="left">
+        <h2 style="margin-top:0">Your garden gadgets</h2>
+        <button class="info" type="button" data-help="top" title="What is this page?" aria-label="What is this page?">i</button>
+      </div>
+      <button class="btn btn-soft btn-sm" id="rescan"><svg class="gp-ic"><use href="#gp-refresh"/></svg> Look again</button>
+    </div>
+    <p class="sub">Cameras, sensors, and deterrents found on this Pi or your home network.
+      Give each one a name, tell us what it is, and add it to your garden.</p>
+    <div class="err" id="err"></div>
+
+    <div id="getstarted"></div>
+    <div id="detected"><div class="empty">Looking for gadgets…</div></div>
+
+    <h2>Already in your garden</h2>
+    <div id="registered"><div class="empty">Nothing added yet.</div></div>
+
+    <div class="row-top" style="margin-top:30px">
+      <div class="left">
+        <h2 style="margin:0">Add one by hand</h2>
+        <button class="info" type="button" data-help="manual" title="When would I add a gadget by hand?" aria-label="When would I add a gadget by hand?">i</button>
+      </div>
+    </div>
+    <p class="sub">For something the scan didn't pick up (or to try it out without the real hardware).</p>
+    <div class="dev" id="manual"></div>
+  </main>
+
+  <!-- Help modal (one shared dialog; the ⓘ pills open it at the right section). -->
+  <div class="modal-back" id="help-back">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="modal-top">
+        <h3 id="help-title">How this page works</h3>
+        <button class="x" id="help-close" type="button" aria-label="Close"><svg class="gp-ic"><use href="#gp-x"/></svg></button>
+      </div>
+      <div id="help-top">
+        <p>Every gadget in your garden shows up here once we spot it — cameras, sensors, and
+          deterrents on your network. For each one: give it a name you'll
+          recognise, double-check what it is, and press <b>Add to garden</b>.</p>
+      </div>
+
+      <h4 id="help-kind"><span class="gi"><svg class="gp-ic"><use href="#gp-tag"/></svg></span> Watcher or Deterrent?</h4>
+      <p>This is the gadget's <b>job</b> in your garden.</p>
+      <div class="glossary">
+        <div class="gi"><svg class="gp-ic"><use href="#gp-eye"/></svg></div><div class="gt"><b>Watcher</b> — <span>keeps an eye out and reports what it sees (cameras, motion sensors, microphones…).</span></div>
+        <div class="gi"><svg class="gp-ic brand"><use href="#gp-shield"/></svg></div><div class="gt"><b>Deterrent</b> — <span>does something to shoo critters away (a water sprayer, an alarm, a flashing light…).</span></div>
+      </div>
+
+      <h4 id="help-type"><span class="gi"><svg class="gp-ic"><use href="#gp-search"/></svg></span> What kind of gadget?</h4>
+      <p>The specific type. We make a best guess from what we detected — change it if it's not right.
+        Your choices update to match whether it's a Watcher or a Deterrent.</p>
+
+      <h4 id="help-details"><span class="gi"><svg class="gp-ic"><use href="#gp-plug"/></svg></span> The connection line</h4>
+      <p>The small grey line under each gadget says how it's hooked up — which camera port, USB
+        slot, or network address. It's just there for troubleshooting; you don't need to change it.
+        Hover it to see the raw technical details.</p>
+
+      <h4 id="help-manual"><span class="gi"><svg class="gp-ic"><use href="#gp-hand"/></svg></span> Adding one by hand</h4>
+      <p>If a gadget didn't turn up in the scan — it's offline, brand new, or you just want to try
+        the app without real hardware — add it here by typing a name and picking what it is.</p>
+    </div>
+  </div>
+
+  <!-- Edit modal -->
+  <div class="modal-back" id="edit-back">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+      <div class="modal-top">
+        <h3 id="edit-title">Edit gadget</h3>
+        <button class="x" id="edit-close" type="button" aria-label="Close" onclick="closeEditModal()"><svg class="gp-ic"><use href="#gp-x"/></svg></button>
+      </div>
+      <form id="edit-form" onsubmit="event.preventDefault(); saveDeviceEdit();">
+        <input type="hidden" id="edit-id">
+        
+        <div style="margin-top: 14px;">
+          <label for="edit-name">Display Name</label>
+          <input type="text" id="edit-name" class="input w-full" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px;">
+          <div>
+            <label for="edit-kind">Job</label>
+            <select id="edit-kind" class="select w-full"></select>
+          </div>
+          <div>
+            <label for="edit-type">Type</label>
+            <select id="edit-type" class="select w-full"></select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px;">
+          <div>
+            <label for="edit-node">Which hub</label>
+            <input type="text" id="edit-node" class="input w-full" required>
+          </div>
+          <div>
+            <label for="edit-status">Status</label>
+            <select id="edit-status" class="select w-full">
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Alarm roles -->
+        <h4 style="margin: 20px 0 6px;"><span class="gi"><svg class="gp-ic"><use href="#gp-alert"/></svg></span> Alarm roles</h4>
+        <p style="font-size:12.5px;color:var(--muted);margin:0 0 8px;max-width:560px">A <b>trigger</b> starts an alarm
+          (a radar, motion sensor, or a camera you want to act as a tripwire). A <b>confirmer</b> adds camera evidence
+          to corroborate one. A gadget can be both, one, or neither.</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label style="display:flex;align-items:center;gap:9px;text-transform:none;font-weight:normal;cursor:pointer;margin:0;font-size:14px;color:var(--text)">
+            <input type="checkbox" id="edit-can-trigger" class="checkbox checkbox-sm"> Can trigger an alarm
+          </label>
+          <label style="display:flex;align-items:center;gap:9px;text-transform:none;font-weight:normal;cursor:pointer;margin:0;font-size:14px;color:var(--text)">
+            <input type="checkbox" id="edit-can-confirm" class="checkbox checkbox-sm"> Is used to confirm an alarm
+          </label>
+        </div>
+
+        <!-- Motion trigger (cameras only) -->
+        <div id="edit-motion-section" hidden>
+          <h4 style="margin: 20px 0 6px;"><span class="gi"><svg class="gp-ic"><use href="#gp-eye"/></svg></span> Motion trigger</h4>
+          <p style="font-size:12.5px;color:var(--muted);margin:0 0 8px;max-width:560px">Instead of treating every photo as
+            an alarm, watch this camera for <b>movement</b> and only raise an alarm when something actually moves. The
+            watching happens right on your hub — only a confirmed sighting is sent up.</p>
+          <label style="display:flex;align-items:center;gap:9px;text-transform:none;font-weight:normal;cursor:pointer;margin:0;font-size:14px;color:var(--text)">
+            <input type="checkbox" id="edit-motion-enabled" class="checkbox checkbox-sm"> Use this camera as a motion trigger
+          </label>
+          <div id="edit-motion-opts" style="margin-top:12px" hidden>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <label for="edit-motion-cadence">Check for movement</label>
+                <select id="edit-motion-cadence" class="select w-full"></select>
+              </div>
+              <div>
+                <label for="edit-motion-frames">Frames in a row to confirm</label>
+                <input type="number" id="edit-motion-frames" class="input w-full" min="1" max="10" step="1">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+              <div>
+                <label for="edit-motion-sensitivity">Sensitivity <span id="edit-motion-sens-val" style="color:var(--muted)"></span></label>
+                <input type="range" id="edit-motion-sensitivity" class="range range-sm range-primary" min="0" max="100" step="5" style="width:100%">
+              </div>
+              <div>
+                <label for="edit-motion-cooldown">Quiet time after an alert (seconds)</label>
+                <input type="number" id="edit-motion-cooldown" class="input w-full" min="1" max="3600" step="1">
+              </div>
+            </div>
+            <div style="margin-top:16px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin:0">
+                <span style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600">Monitor zone</span>
+                <button type="button" id="edit-roi-clear" class="action-btn">Use whole frame</button>
+              </div>
+              <p id="edit-roi-desc" style="font-size:12px;color:var(--muted);margin:6px 0 8px">Drag a box over just the area you want
+                watched (e.g. the garden bed) — movement elsewhere is ignored. When using a keyboard, press Enter or Space to watch the whole frame.</p>
+              <div id="edit-roi-wrap" style="position:relative;display:inline-block;max-width:100%;border:1px solid var(--hairline);border-radius:var(--radius-sm);overflow:hidden;background:#0003">
+                <canvas id="edit-roi-canvas" tabindex="0" aria-describedby="edit-roi-desc" aria-label="Monitor zone — drag to draw the area to watch, or press Enter or Space to watch the whole frame" style="display:block;max-width:100%;cursor:crosshair;touch-action:none"></canvas>
+                <div id="edit-roi-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center;padding:10px">Loading a snapshot…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Optional Transport Fields section -->
+        <h4 style="margin: 20px 0 6px;"><span class="gi"><svg class="gp-ic"><use href="#gp-plug"/></svg></span> Connection details (for troubleshooting)</h4>
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+          <div>
+            <label id="edit-trans-host-label" for="edit-trans-host">Host / IP / Dev</label>
+            <input type="text" id="edit-trans-host" class="input w-full">
+          </div>
+          <div>
+            <label id="edit-trans-port-label" for="edit-trans-port">Port</label>
+            <input type="number" id="edit-trans-port" class="input w-full">
+          </div>
+        </div>
+
+        <div class="log" id="edit-log"></div>
+        
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 22px;">
+          <button class="btn btn-ghost" type="button" onclick="closeEditModal()">Cancel</button>
+          <button class="btn btn-primary" id="edit-save-btn" type="submit">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Remove confirmation modal -->
+  <div class="modal-back" id="remove-back">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="remove-title" style="max-width: 480px;">
+      <div class="modal-top">
+        <h3 id="remove-title" style="color: var(--red-ink);">Remove Gadget?</h3>
+        <button class="x" id="remove-close" type="button" aria-label="Close" onclick="closeRemoveModal()"><svg class="gp-ic"><use href="#gp-x"/></svg></button>
+      </div>
+      <p style="margin-top: 10px;">Are you sure you want to remove <b id="remove-name"></b> from your garden?</p>
+      <p style="font-size: 13.5px; color: var(--muted); margin-top: 6px;">
+        This takes the gadget out of your garden. If it's the last gadget here, your
+        garden's private keys are safely cleared away too.
+      </p>
+      
+      <div class="log" id="remove-log"></div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;">
+        <button class="btn btn-ghost" type="button" onclick="closeRemoveModal()">Keep Gadget</button>
+        <button class="btn btn-error" id="remove-confirm-btn" onclick="saveDeviceRemove()">Remove Gadget</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full-size camera image viewer (click any snapshot). -->
+  <div class="img-back" id="img-back">
+    <img id="img-big" alt="">
+    <div class="cap" id="img-cap"></div>
+  </div>
+
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const state = { node_id: "pi-01", taxonomy: { kinds: ["observer", "deterrent"], observer_types: [], deterrent_types: [] } };
+
+    // ---- Friendly vocabulary -------------------------------------------------
+    // The raw `kind`/`type` strings are identifiers the edge stores; we only ever
+    // CHANGE how they're DISPLAYED (label + icon), never the stored value.
+    // icon values are shared SVG sprite IDs (see gp.js); render via GP.svgUse(id).
+    const KIND_META = {
+      observer:  { icon: "gp-eye", label: "Watcher (sensor / camera)" },
+      deterrent: { icon: "gp-shield", label: "Deterrent (sprayer / alarm)" },
+    };
+    const TYPE_META = {
+      // observers
+      camera_csi:    { icon: "gp-camera", label: "Pi camera (ribbon)" },
+      camera_usb:    { icon: "gp-camera", label: "USB camera" },
+      camera_rtsp:   { icon: "gp-video", label: "Network camera" },
+      motion_pir:    { icon: "gp-motion", label: "Motion sensor" },
+      heat_thermal:  { icon: "gp-thermo", label: "Heat sensor" },
+      ir_break_beam: { icon: "gp-beam", label: "Trip-beam" },
+      sound_mic:     { icon: "gp-mic", label: "Microphone" },
+      contact_switch:{ icon: "gp-door", label: "Door / contact switch" },
+      // deterrents
+      water_pump:    { icon: "gp-spray", label: "Water sprayer" },
+      solenoid:      { icon: "gp-valve", label: "Water valve" },
+      sound:         { icon: "gp-speaker", label: "Noise maker" },
+      strobe:        { icon: "gp-alert", label: "Flashing light" },
+      shelly_switch: { icon: "gp-plug", label: "Smart switch" },
+      relay_generic: { icon: "gp-bolt", label: "Relay switch" },
+    };
+    const prettify = (t) => String(t || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const typeLabel = (t) => (TYPE_META[t] && TYPE_META[t].label) || prettify(t) || "Gadget";
+    // typeIcon/kindIcon return ready-to-insert <svg> markup (via GP.svgUse).
+    const typeIcon  = (t) => GP.svgUse((TYPE_META[t] && TYPE_META[t].icon) || "gp-gear");
+    const kindLabel = (k) => (KIND_META[k] && KIND_META[k].label) || prettify(k);
+    const kindIcon  = (k) => GP.svgUse((KIND_META[k] && KIND_META[k].icon) || "gp-gear");
+    const isCameraType = (t) => /^camera_/.test(String(t || ""));
+
+    // A stable signature for a camera (detected OR registered) so we can tell when a
+    // detected camera is already in the garden and shouldn't be offered to add again.
+    function camSig(x) {
+      const t = (x && x.transport) || {};
+      const slot = t.index != null ? t.index : (t.dev || t.host || t.url || "");
+      return (t.kind || "cam") + ":" + slot;
+    }
+    // "12s ago" / "3m ago" — humanise an epoch-ms timestamp.
+    function fmtAgo(ts) {
+      if (!ts) return "";
+      const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+      if (s < 60) return s + "s ago";
+      const m = Math.round(s / 60); if (m < 60) return m + "m ago";
+      const h = Math.round(m / 60); if (h < 24) return h + "h ago";
+      return Math.round(h / 24) + "d ago";
+    }
+    const NODE_OFFLINE_AFTER_S = 150;   // matches the edge's liveness threshold
+
+    // Turn a transport blob / node discovery into one friendly sentence.
+    function describeConnection(d, isCam) {
+      const t = d.transport || {};
+      if (isCam) {
+        if (t.kind === "csi") return "Pi camera on ribbon port " + (t.index != null ? t.index : "?");
+        if (t.kind === "usb") return "USB camera" + (t.dev ? " at " + t.dev : "");
+        if (t.kind === "v4l2") return "Video device" + (t.dev ? " at " + t.dev : "");
+        return "Camera";
+      }
+      const where = { mdns: "found on your network", passive: "seen via the gateway", manual: "added by hand" }[d.found_by] || (d.found_by || "detected");
+      let s = "Garden hub" + (d.node_id ? " “" + d.node_id + "”" : "") + " · " + where;
+      if (d.host) s += " · " + d.host + (d.port ? ":" + d.port : "");
+      if (d.props && d.props.fitted) s += " · fitted to " + d.props.fitted;
+      return s;
+    }
+
+    const slug = (s) => (s || "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/-{2,}/g, "-").replace(/^-|-$/g, "").slice(0, 64);
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    function logLine(el, line, level) {
+      const d = document.createElement("div"); d.className = "l-" + (level || "info");
+      d.innerHTML = GP.logIcon(level) + " " + esc(line);
+      el.appendChild(d); el.scrollTop = el.scrollHeight;
+    }
+
+    // Build the <option> list for a kind, showing friendly icon + label per type.
+    function typeOptions(kind, selected) {
+      const list = (kind === "deterrent" ? state.taxonomy.deterrent_types : state.taxonomy.observer_types).slice();
+      if (selected && !list.includes(selected)) list.unshift(selected);
+      return list.map((t) =>
+        `<option value="${esc(t)}" ${t === selected ? "selected" : ""}>${typeIcon(t)}  ${esc(typeLabel(t))}</option>`).join("");
+    }
+    function kindOptions(selected) {
+      return state.taxonomy.kinds.map((k) =>
+        `<option value="${esc(k)}" ${k === selected ? "selected" : ""}>${kindIcon(k)}  ${esc(kindLabel(k))}</option>`).join("");
+    }
+
+    // Build one detected-gadget card (a camera or an ESP32 node).
+    function deviceCard(d, idx) {
+      const isCam = !!d.transport && (d.transport.kind === "usb" || d.transport.kind === "csi" || d.transport.kind === "v4l2");
+      const defName = d.label || d.node_id || (isCam ? "Camera" : "Garden node");
+      const defType = d.type || (isCam ? (d.transport.kind === "csi" ? "camera_csi" : "camera_usb") : "motion_pir");
+      const nodeId = d.node_id || state.node_id;
+      const conn = describeConnection(d, isCam);
+      const raw = d.transport ? JSON.stringify(d.transport) : JSON.stringify({ found_by: d.found_by, host: d.host, port: d.port, props: d.props });
+      const wrap = document.createElement("div");
+      wrap.className = "dev";
+      wrap.innerHTML = `
+        <div class="dev-head">
+          <span class="dev-ic">${typeIcon(defType)}</span>
+          <span class="name">${esc(defName)}</span>
+          <span class="badge">${esc(d.found_by || (isCam ? "camera" : "node"))}</span>
+        </div>
+        <div class="meta"><span class="raw" title="${esc(raw)}">${esc(conn)}</span></div>
+        <div class="controls">
+          <div><label>Name</label><input class="input w-full f-name" value="${esc(defName)}"></div>
+          <div><label>Job <button class="info" type="button" data-help="kind" title="Watcher or Deterrent?" aria-label="Watcher or Deterrent?">i</button></label>
+            <select class="select w-full f-kind">${kindOptions("observer")}</select></div>
+          <div><label>Type <button class="info" type="button" data-help="type" title="What kind of gadget?" aria-label="What kind of gadget?">i</button></label>
+            <select class="select w-full f-type">${typeOptions("observer", defType)}</select></div>
+          <div><button class="btn btn-primary f-go">Add to garden</button></div>
+        </div>
+        <div class="log"></div>`;
+      const kindSel = wrap.querySelector(".f-kind"), typeSel = wrap.querySelector(".f-type"), ic = wrap.querySelector(".dev-ic");
+      kindSel.addEventListener("change", () => { typeSel.innerHTML = typeOptions(kindSel.value, ""); ic.innerHTML = typeIcon(typeSel.value); });
+      typeSel.addEventListener("change", () => { ic.innerHTML = typeIcon(typeSel.value); });
+      wrap.querySelector(".f-go").addEventListener("click", async (e) => {
+        const btn = e.target, log = wrap.querySelector(".log");
+        const name = wrap.querySelector(".f-name").value.trim();
+        const payload = {
+          device_id: slug(name) || ("dev-" + idx), name,
+          kind: kindSel.value, type: typeSel.value, node_id: nodeId,
+          transport: d.transport || { kind: d.found_by || "manual", host: d.host || null, port: d.port || null, ip: d.ip || null, props: d.props || {} },
+          scan_meta: { found_by: d.found_by || "scan", ts: 0 },
+        };
+        btn.disabled = true; log.classList.add("show"); log.innerHTML = "";
+        const res = await registerDevice(payload, log);
+        if (res.ok) {
+          wrap.classList.add("reg"); btn.innerHTML = GP.svgUse("gp-check") + " Added";
+          loadRegistered();                         // refresh "Already in your garden" below
+          if (isCam) {
+            // A camera maps 1:1 to a registered gadget — it now lives in the section
+            // below (with its live view), so retire this add card to avoid the
+            // "added but still says Add to garden" confusion.
+            logLine(log, "added — see it under “Already in your garden” below.", "ok");
+            setTimeout(() => { wrap.style.transition = "opacity .4s"; wrap.style.opacity = "0";
+              setTimeout(() => wrap.remove(), 400); }, 1100);
+          }
+        } else {
+          btn.disabled = false;
+          logLine(log, "couldn't add it — see above", "error");
+        }
+      });
+      return wrap;
+    }
+
+    // POST the payload and consume the streamed SSE response (EventSource is GET-only).
+    async function streamPostOp(endpoint, payload, logEl) {
+      let res = { ok: false };
+      try {
+        const r = await fetch(endpoint, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (r.status === 401) { logLine(logEl, "session expired — reload and sign in", "error"); return res; }
+        const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
+        while (true) {
+          const { done, value } = await reader.read(); if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+            let data = null;
+            for (const line of frame.split("\n")) if (line.startsWith("data:")) data = (data || "") + line.slice(5).trim();
+            if (data) { try { const dd = JSON.parse(data); if (dd.line) logLine(logEl, dd.line, dd.level); if (dd.done) res = dd; } catch (e) {} }
+          }
+        }
+      } catch (e) { logLine(logEl, "error: " + e.message, "error"); }
+      return res;
+    }
+
+    async function registerDevice(payload, logEl) {
+      return streamPostOp("/api/wizard/devices/register/stream", payload, logEl);
+    }
+
+    // ---- Edit and Remove Gadgets handlers ----
+    function openEditModal(d) {
+      state.activeEditDevice = d;
+      $("edit-id").value = d.device_id;
+      $("edit-name").value = d.name || d.device_id;
+      $("edit-node").value = d.node_id || "pi-01";
+      $("edit-status").value = d.status || "active";
+      // Alarm roles (default cameras to confirm-only when the field is absent on older entries).
+      $("edit-can-trigger").checked = !!d.can_trigger_alarm;
+      $("edit-can-confirm").checked = d.can_confirm_alarm !== undefined
+        ? !!d.can_confirm_alarm : String(d.type || "").indexOf("camera_") === 0;
+
+      $("edit-kind").innerHTML = kindOptions(d.kind || "observer");
+      $("edit-type").innerHTML = typeOptions(d.kind || "observer", d.type);
+      $("edit-kind").onchange = () => {
+        $("edit-type").innerHTML = typeOptions($("edit-kind").value, "");
+      };
+
+      const t = d.transport || {};
+      $("edit-trans-host").value = t.host || t.dev || t.ip || t.url || "";
+      $("edit-trans-port").value = t.port || "";
+
+      // Motion trigger (camera devices only).
+      const showMotion = isCameraType(d.type);
+      $("edit-motion-section").hidden = !showMotion;
+      if (showMotion) setupMotionEditor(d);
+
+      $("edit-log").classList.remove("show");
+      $("edit-log").innerHTML = "";
+      $("edit-back").classList.add("show");
+    }
+
+    function closeEditModal() {
+      $("edit-back").classList.remove("show");
+      state.activeEditDevice = null;
+    }
+
+    function openRemoveConfirm(d) {
+      state.activeRemoveDevice = d;
+      $("remove-name").textContent = d.name || d.device_id;
+      $("remove-log").classList.remove("show");
+      $("remove-log").innerHTML = "";
+      $("remove-back").classList.add("show");
+    }
+
+    function closeRemoveModal() {
+      $("remove-back").classList.remove("show");
+      state.activeRemoveDevice = null;
+    }
+
+    async function saveDeviceEdit() {
+      const d = state.activeEditDevice;
+      if (!d) return;
+
+      const did = $("edit-id").value;
+      const name = $("edit-name").value.trim();
+      const kind = $("edit-kind").value;
+      const type = $("edit-type").value;
+      const node_id = $("edit-node").value.trim();
+      const status = $("edit-status").value;
+      const host = $("edit-trans-host").value.trim();
+      const portVal = $("edit-trans-port").value.trim();
+      const port = portVal ? parseInt(portVal, 10) : null;
+
+      const transport = { ...(d.transport || {}) };
+      if (host) {
+        if (transport.dev !== undefined) transport.dev = host;
+        else if (transport.ip !== undefined) transport.ip = host;
+        else if (transport.url !== undefined) transport.url = host;
+        else transport.host = host;
+      }
+      if (portVal !== "") {
+        transport.port = port;
+      }
+
+      // A camera used as a motion trigger MUST also have the can-trigger-alarm role (else the
+      // hub's motion marker wouldn't create an alarm). The role checkbox is auto-ticked when
+      // motion is enabled, but enforce it in the payload too so the two never drift.
+      const motionOn = isCameraType(type) && $("edit-motion-enabled").checked;
+      const payload = {
+        device_id: did, name, kind, type, node_id, status, transport,
+        can_trigger_alarm: $("edit-can-trigger").checked || motionOn,
+        can_confirm_alarm: $("edit-can-confirm").checked
+      };
+
+      const btn = $("edit-save-btn");
+      const log = $("edit-log");
+      btn.disabled = true;
+      log.classList.add("show");
+      log.innerHTML = "";
+
+      const res = await streamPostOp("/api/wizard/devices/edit/stream", payload, log);
+      if (res.ok) {
+        // Persist the camera's motion-trigger tuning + monitor zone (Pi-local; hot-reloaded).
+        if (isCameraType(type)) {
+          try { await postMotionSettings(did); }
+          catch (e) { logLine(log, "Saved, but couldn't save motion settings.", "error"); }
+        }
+        logLine(log, "Edits saved successfully.", "ok");
+        setTimeout(() => {
+          closeEditModal();
+          loadRegistered();
+        }, 1200);
+      } else {
+        logLine(log, "Failed to save edits.", "error");
+      }
+      btn.disabled = false;
+    }
+
+    // ---- Motion-trigger editor (per-camera detection knobs + monitor zone) ----
+    const roiEditor = { img: null, rect: null, drag: null, did: null };
+    const CADENCE_LABELS = { 1: "every second", 2: "every 2 seconds", 5: "every 5 seconds" };
+
+    function populateCadence(opts, sel) {
+      $("edit-motion-cadence").innerHTML = (opts || [1, 2, 5]).map(
+        (o) => `<option value="${o}"${Number(o) === Number(sel) ? " selected" : ""}>${CADENCE_LABELS[o] || ("every " + o + "s")}</option>`
+      ).join("");
+    }
+
+    function setSensitivity(v) {
+      $("edit-motion-sensitivity").value = v;
+      $("edit-motion-sens-val").textContent = "(" + v + "%)";
+    }
+
+    function toggleMotionOpts() {
+      $("edit-motion-opts").hidden = !$("edit-motion-enabled").checked;
+      if (!$("edit-motion-opts").hidden) requestAnimationFrame(drawRoi);
+    }
+
+    async function setupMotionEditor(d) {
+      populateCadence([1, 2, 5], 1);
+      $("edit-motion-enabled").checked = false;
+      $("edit-motion-frames").value = 3;
+      setSensitivity(50);
+      $("edit-motion-cooldown").value = 30;
+      roiEditor.rect = null;
+      toggleMotionOpts();
+      loadRoiSnapshot(d.device_id);
+      try {
+        const r = await fetch("/api/gadget/motion-settings?device=" + encodeURIComponent(d.device_id), { cache: "no-store" });
+        if (r.ok) {
+          const m = await r.json();
+          populateCadence(m.cadence_options || [1, 2, 5], m.cadence_s);
+          $("edit-motion-enabled").checked = !!m.enabled;
+          $("edit-motion-frames").value = m.confirm_frames || 3;
+          setSensitivity(Math.round((m.sensitivity != null ? m.sensitivity : 0.5) * 100));
+          $("edit-motion-cooldown").value = m.cooldown_s || 30;
+          roiEditor.rect = m.roi || null;
+          toggleMotionOpts();
+          drawRoi();
+        }
+      } catch (e) {}
+    }
+
+    async function postMotionSettings(did) {
+      const body = {
+        device_id: did,
+        enabled: $("edit-motion-enabled").checked,
+        cadence_s: parseInt($("edit-motion-cadence").value, 10) || 1,
+        confirm_frames: parseInt($("edit-motion-frames").value, 10) || 3,
+        sensitivity: (parseInt($("edit-motion-sensitivity").value, 10) || 50) / 100,
+        cooldown_s: parseInt($("edit-motion-cooldown").value, 10) || 30,
+        roi: roiEditor.rect || null
+      };
+      await fetch("/api/gadget/motion-settings", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      });
+    }
+
+    function loadRoiSnapshot(did) {
+      roiEditor.did = did;
+      roiEditor.img = null;
+      const hint = $("edit-roi-hint");
+      hint.textContent = "Loading a snapshot…";
+      hint.style.display = "";
+      const img = new Image();
+      img.onload = () => { roiEditor.img = img; sizeRoiCanvas(); hint.style.display = "none"; drawRoi(); };
+      img.onerror = () => { hint.textContent = "No snapshot yet — start the camera, then reopen."; };
+      img.src = "/api/gadget/snapshot?device=" + encodeURIComponent(did) + "&t=" + Date.now();
+    }
+
+    function sizeRoiCanvas() {
+      const cv = $("edit-roi-canvas"), img = roiEditor.img;
+      if (!cv || !img) return;
+      const maxW = Math.min(520, $("edit-roi-wrap").parentElement.clientWidth || 520);
+      const w = Math.min(img.naturalWidth || maxW, maxW);
+      cv.width = w;
+      cv.height = Math.round((img.naturalHeight || w) * (w / (img.naturalWidth || w)));
+    }
+
+    function drawRoi() {
+      const cv = $("edit-roi-canvas"), img = roiEditor.img;
+      if (!cv || !img) return;
+      const ctx = cv.getContext("2d");
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      const r = roiEditor.rect;
+      if (r) {
+        const x = r.x * cv.width, y = r.y * cv.height, w = r.w * cv.width, h = r.h * cv.height;
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(0, 0, cv.width, y);
+        ctx.fillRect(0, y + h, cv.width, cv.height - (y + h));
+        ctx.fillRect(0, y, x, h);
+        ctx.fillRect(x + w, y, cv.width - (x + w), h);
+        ctx.strokeStyle = "#22d3a6";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+      }
+    }
+
+    function rectFrom(a, b) {
+      return {
+        x: +Math.min(a.x, b.x).toFixed(4), y: +Math.min(a.y, b.y).toFixed(4),
+        w: +Math.abs(b.x - a.x).toFixed(4), h: +Math.abs(b.y - a.y).toFixed(4)
+      };
+    }
+
+    (function initMotionEditor() {
+      $("edit-motion-enabled").addEventListener("change", () => {
+        toggleMotionOpts();
+        if ($("edit-motion-enabled").checked) $("edit-can-trigger").checked = true;
+      });
+      $("edit-motion-sensitivity").addEventListener("input",
+        (e) => { $("edit-motion-sens-val").textContent = "(" + e.target.value + "%)"; });
+      $("edit-roi-clear").addEventListener("click", () => { roiEditor.rect = null; drawRoi(); });
+      const cv = $("edit-roi-canvas");
+      const at = (e) => {
+        const b = cv.getBoundingClientRect();
+        return { x: Math.min(Math.max((e.clientX - b.left) / b.width, 0), 1),
+                 y: Math.min(Math.max((e.clientY - b.top) / b.height, 0), 1) };
+      };
+      cv.addEventListener("pointerdown", (e) => { if (!roiEditor.img) return; cv.setPointerCapture(e.pointerId); roiEditor.drag = at(e); });
+      cv.addEventListener("pointermove", (e) => { if (!roiEditor.drag) return; roiEditor.rect = rectFrom(roiEditor.drag, at(e)); drawRoi(); });
+      cv.addEventListener("pointerup", (e) => {
+        if (!roiEditor.drag) return;
+        const r = rectFrom(roiEditor.drag, at(e));
+        roiEditor.drag = null;
+        roiEditor.rect = (r.w > 0.02 && r.h > 0.02) ? r : null;   // a click (no drag) clears -> whole frame
+        drawRoi();
+      });
+      cv.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); roiEditor.rect = null; drawRoi(); }
+      });
+    })();
+
+    async function saveDeviceRemove() {
+      const d = state.activeRemoveDevice;
+      if (!d) return;
+
+      const payload = { device_id: d.device_id };
+      const btn = $("remove-confirm-btn");
+      const log = $("remove-log");
+      btn.disabled = true;
+      log.classList.add("show");
+      log.innerHTML = "";
+
+      const res = await streamPostOp("/api/wizard/devices/unregister/stream", payload, log);
+      if (res.ok) {
+        logLine(log, "Device removed successfully.", "ok");
+        setTimeout(() => {
+          closeRemoveModal();
+          loadRegistered();
+          scan();
+        }, 1200);
+      } else {
+        logLine(log, "Failed to remove device.", "error");
+      }
+      btn.disabled = false;
+    }
+
+    // Registered gadgets the page is actively polling (snapshot + status). Rebuilt by
+    // loadRegistered(); driven by one shared timer so we never stack intervals.
+    let gadgetCards = [];
+    let gadgetTimer = null;
+
+    async function loadRegistered() {
+      if (gadgetTimer) { clearInterval(gadgetTimer); gadgetTimer = null; }
+      gadgetCards.forEach((c) => { if (c.img) GP.stopStream(c.img); });   // drop old MJPEG sockets before rebuild
+      gadgetCards = [];
+      try {
+        const st = await (await fetch("/api/wizard/state")).json();
+        const devs = st.devices || [];
+        renderGetStarted(devs.length);
+        const box = $("registered");
+        if (!devs.length) { box.innerHTML = `<div class="empty">Nothing added yet.</div>`; return; }
+        box.innerHTML = "";
+        devs.forEach((d) => box.appendChild(registeredCard(d)));
+        refreshGadgets();                                  // paint statuses/snaps now…
+        gadgetTimer = setInterval(refreshGadgets, 12000);  // …then keep them fresh
+      } catch (e) {}
+    }
+
+    // One "in your garden" card: status pill for every gadget, plus a live-ish camera
+    // view (auto-refreshing snapshot) + last-sighting line for cameras.
+    function registeredCard(d) {
+      const cam = isCameraType(d.type);
+      const wrap = document.createElement("div");
+      wrap.className = "dev reg gadget";
+      wrap.dataset.did = d.device_id;
+      wrap.innerHTML = `
+        <div class="dev-head">
+          <span class="dev-ic">${typeIcon(d.type)}</span>
+          <span class="name">${esc(d.name || d.device_id)}</span>
+          <span class="badge ok">${esc(typeLabel(d.type))}</span>
+          <span class="status-pill" data-status>checking…</span>
+          <div class="dev-actions">
+            <button class="action-btn edit-btn" type="button">${GP.svgUse("gp-edit")} Edit</button>
+            <button class="action-btn remove-btn" type="button">${GP.svgUse("gp-x")} Remove</button>
+          </div>
+        </div>
+        <div class="meta">${esc(kindLabel(d.kind))} · on hub ${esc(d.node_id || "?")}</div>
+        ${cam ? `<div class="cam">
+          <div class="frame">
+            <img class="snap" alt="Latest picture from ${esc(d.name || d.device_id)}" hidden>
+            <div class="snap-empty">${GP.svgUse("gp-camera")} Waiting for the first picture…<br>make sure this camera's feed is running.</div>
+            <span class="live"><span class="dot"></span>LIVE</span>
+          </div>
+          <div class="event" data-event></div>
+        </div>` : ``}`;
+      const card = {
+        did: d.device_id, kind: d.kind, isCam: cam,
+        status: wrap.querySelector("[data-status]"),
+        img: wrap.querySelector(".snap"),
+        empty: wrap.querySelector(".snap-empty"),
+        live: wrap.querySelector(".live"),
+        event: wrap.querySelector("[data-event]"),
+      };
+      if (cam) {
+        card.img.addEventListener("load", () => {
+          card.img.hidden = false; card.empty.style.display = "none"; card.live.classList.add("show");
+        });
+        card.img.addEventListener("error", () => {
+          // The live MJPEG dropped (daemon restart / camera busy). Show the waiting state;
+          // GP.stream owns the reconnect (and suppresses it while the page is hidden).
+          card.img.hidden = true; card.empty.style.display = ""; card.live.classList.remove("show");
+        });
+        card.img.addEventListener("click", () => openImage(card.img.src, d.name || d.device_id));
+        // Managed live LAN feed: GP.stream opens the MJPEG and owns its reconnect + teardown
+        // (closed on card rebuild and on page hide/navigate so sockets can't pile up).
+        GP.stream(card.img, "/api/gadget/stream?device=" + encodeURIComponent(d.device_id));
+      }
+      wrap.querySelector(".edit-btn").addEventListener("click", () => openEditModal(d));
+      wrap.querySelector(".remove-btn").addEventListener("click", () => openRemoveConfirm(d));
+      gadgetCards.push(card);
+      return wrap;
+    }
+
+    // Poll each registered gadget's status (online pill + last sighting). Cameras
+    // get their pixels from the live MJPEG stream above, not from here — this loop
+    // only refreshes the metadata (skipped while the tab is hidden).
+    function refreshGadgets() {
+      if (document.hidden) return;
+      gadgetCards.forEach((c) => {
+        fetch(`/api/gadget/status?device=${encodeURIComponent(c.did)}`, { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null)).then((j) => applyStatus(c, j)).catch(() => {});
+      });
+    }
+
+    function applyStatus(c, j) {
+      const ev = (j && j.event) || null, tel = (j && j.telemetry) || null;
+      // A camera's "last seen" is its last pushed frame (each push stamps an event);
+      // other gadgets report liveness through telemetry heartbeats.
+      const lastTs = c.isCam ? (ev && ev.ts) || 0
+                             : (tel && (tel.last_seen_ms || tel.ts)) || (ev && ev.ts) || 0;
+      const online = lastTs ? (Date.now() - lastTs) / 1000 <= NODE_OFFLINE_AFTER_S : false;
+      const pill = c.status;
+      if (pill) {
+        if (online) { pill.textContent = "● online"; pill.className = "status-pill on"; }
+        else if (lastTs) { pill.textContent = "last seen " + fmtAgo(lastTs); pill.className = "status-pill off"; }
+        else { pill.textContent = "no signal yet"; pill.className = "status-pill idle"; }
+      }
+      if (c.live) c.live.classList.toggle("show", online && !c.img.hidden);
+      if (c.event && c.isCam) {
+        if (!ev || !ev.ts) c.event.innerHTML = "";
+        else if (ev.action === "mitigate") c.event.innerHTML = `${GP.svgUse("gp-alert", "bad")} ${esc(ev.species || "intruder")} — deterrent fired · ${esc(fmtAgo(ev.ts))}`;
+        else if (ev.reason === "rain") c.event.innerHTML = `${GP.svgUse("gp-rain")} held off (rain) · ${esc(fmtAgo(ev.ts))}`;
+        else if (ev.species && ev.species !== "none") c.event.innerHTML = `${GP.svgUse("gp-eye")} saw ${esc(ev.species)} · ${esc(fmtAgo(ev.ts))}`;
+        else c.event.innerHTML = `${GP.svgUse("gp-check", "good")} all clear · ${esc(fmtAgo(ev.ts))}`;
+      }
+    }
+
+    // ---- full-size image viewer ----
+    function openImage(src, name) {
+      $("img-big").src = src; $("img-cap").textContent = name || ""; $("img-back").classList.add("show");
+    }
+    $("img-back").addEventListener("click", () => $("img-back").classList.remove("show"));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("img-back").classList.remove("show"); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshGadgets(); });
+
+    // The "let's get started" banner — shown until at least one gadget is in the garden.
+    function renderGetStarted(count) {
+      $("getstarted").innerHTML = count
+        ? `<div class="callout ok"><span class="ic">${GP.svgUse("gp-check", "good")}</span><div class="ct">
+             <b>${count} gadget${count === 1 ? "" : "s"} in your garden.</b> Add more below any time,
+             or head to the <a href="/">dashboard</a> to keep watch.</div></div>`
+        : `<div class="callout"><span class="ic">${GP.svgUse("gp-info", "info")}</span><div class="ct">
+             <b>Let's add your first gadget.</b> Pick one from the list below and press
+             <b>Add to garden</b> — your garden can't watch over anything until at least one is added.</div></div>`;
+    }
+
+    async function scan() {
+      $("detected").innerHTML = `<div class="empty">Looking for gadgets… (checking your network takes a few seconds)</div>`;
+      $("err").textContent = "";
+      try {
+        const st = await (await fetch("/api/wizard/state")).json();
+        if (st.node_id) state.node_id = st.node_id;
+        const d = await (await fetch("/api/wizard/devices/scan")).json();
+        if (d.taxonomy) state.taxonomy = d.taxonomy;
+        renderManual();
+        if (d.error) $("err").textContent = "heads up: " + d.error;
+        // Hide cameras that are already in the garden so a re-scan never re-offers a
+        // camera you've added (it lives in "Already in your garden" below instead).
+        const have = new Set((d.registered || []).filter((r) => isCameraType(r.type)).map(camSig));
+        const cams = (d.cameras || []).filter((c) => !have.has(camSig(c)));
+        const hiddenCams = (d.cameras || []).length - cams.length;
+        const items = [...cams, ...(d.nodes || [])];
+        const box = $("detected"); box.innerHTML = "";
+        if (!items.length) {
+          box.innerHTML = hiddenCams
+            ? `<div class="empty">${GP.svgUse("gp-check", "good")} Everything we found is already in your garden. Press <b>Look again</b> after plugging in something new.</div>`
+            : `<div class="empty">No new gadgets spotted. Plug in a camera or power on a sensor, then press <b>Look again</b>. You can also add one by hand below.</div>`;
+        }
+        else items.forEach((it, i) => box.appendChild(deviceCard(it, i)));
+        loadRegistered();
+      } catch (e) { $("detected").innerHTML = `<div class="err">Couldn't scan: ${esc(e.message)}</div>`; }
+    }
+
+    function renderManual() {
+      const wrap = $("manual");
+      wrap.innerHTML = `
+        <div class="dev-head"><span class="dev-ic" id="m-ic">${GP.svgUse("gp-gear")}</span><span class="name">New gadget</span></div>
+        <div class="controls">
+          <div><label>Name</label><input class="input w-full f-name" placeholder="Front bed camera"></div>
+          <div><label>Job <button class="info" type="button" data-help="kind" title="Watcher or Deterrent?" aria-label="Watcher or Deterrent?">i</button></label>
+            <select class="select w-full f-kind">${kindOptions("observer")}</select></div>
+          <div><label>Type <button class="info" type="button" data-help="type" title="What kind of gadget?" aria-label="What kind of gadget?">i</button></label>
+            <select class="select w-full f-type">${typeOptions("observer", "")}</select></div>
+          <div><button class="btn btn-primary f-go">Add to garden</button></div>
+        </div>
+        <div class="log"></div>`;
+      const kindSel = wrap.querySelector(".f-kind"), typeSel = wrap.querySelector(".f-type"), ic = $("m-ic");
+      const syncIc = () => { ic.innerHTML = typeIcon(typeSel.value); };
+      kindSel.addEventListener("change", () => { typeSel.innerHTML = typeOptions(kindSel.value, ""); syncIc(); });
+      typeSel.addEventListener("change", syncIc); syncIc();
+      wrap.querySelector(".f-go").addEventListener("click", async (e) => {
+        const btn = e.target, log = wrap.querySelector(".log");
+        const name = wrap.querySelector(".f-name").value.trim();
+        if (!name) { log.classList.add("show"); logLine(log, "give it a name first", "error"); return; }
+        const payload = { device_id: slug(name), name, kind: kindSel.value, type: typeSel.value,
+          node_id: state.node_id, transport: { kind: "manual" }, scan_meta: { found_by: "manual", ts: 0 } };
+        btn.disabled = true; log.classList.add("show"); log.innerHTML = "";
+        const res = await registerDevice(payload, log);
+        if (res.ok) { btn.innerHTML = GP.svgUse("gp-check") + " Added"; loadRegistered(); setTimeout(renderManual, 800); }
+        else { btn.disabled = false; }
+      });
+    }
+
+    $("rescan").addEventListener("click", scan);
+
+    // ---------- help modal ----------
+    (function initHelp() {
+      const back = $("help-back");
+      let lastHl = null;
+      function open(key) {
+        back.classList.add("show");
+        if (lastHl) lastHl.classList.remove("hl");
+        const target = key && $("help-" + key);
+        if (target && key !== "top") {
+          target.classList.add("hl"); lastHl = target;
+          target.scrollIntoView({ block: "start", behavior: "smooth" });
+        } else { back.querySelector(".modal").scrollTop = 0; }
+      }
+      function close() { back.classList.remove("show"); if (lastHl) { lastHl.classList.remove("hl"); lastHl = null; } }
+      // Event delegation: any [data-help] pill opens the modal at its section.
+      document.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-help]");
+        if (btn) { e.preventDefault(); open(btn.getAttribute("data-help")); }
+      });
+      $("help-close").addEventListener("click", close);
+      back.addEventListener("click", (e) => { if (e.target === back) close(); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && back.classList.contains("show")) close(); });
+    })();
+
+    renderGetStarted(0);
+    scan();
+    // CPU/RAM (#pi-health) is auto-wired by gp.js initPiHealth() — no per-page JS.
+  </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Pinned Rust toolchain for the Fastly Compute (WebAssembly) edge.
+# See CHARTER.md "Standing decisions → Pinned toolchains".
+#
+# Why this file:
+#   * `targets = ["wasm32-wasip1"]` makes rustup AUTO-INSTALL the WASI target on a
+#     fresh checkout, so `cargo build --target wasm32-wasip1` (and `make build`)
+#     work without a manual `rustup target add`. This is the durable fix for the
+#     "can't find crate for `core`" trap (AGENTS.md "Known Traps") — when the rustup
+#     cargo is the one invoked, it always has the target.
+#   * `channel = "stable"` tracks the validated stable line. The actual dependency
+#     versions are pinned by Cargo.lock; tract-onnx 0.23 needs rustc >= 1.91 (current
+#     stable satisfies it). We deliberately do NOT hard-pin a single rustc patch here:
+#     the Fastly CLI validates specific rustc versions for `fastly compute build`
+#     (AGENTS.md trap: CLI v13 rejected 1.96), so an over-pin can fight the CLI gate.
+#     `make build` calls `cargo build` directly and is unaffected either way.
+#
+# IMPORTANT: only the rustup shim (~/.cargo/bin/cargo) honors this file. Homebrew's
+# cargo (/opt/homebrew/bin/cargo, first on PATH on the dev Mac) ignores it, so the
+# Makefile and scripts/serve_backend.sh still prepend $HOME/.cargo/bin to PATH to
+# ensure the rustup cargo is the one selected. This file makes that cargo's toolchain
+# reproducible; it does not by itself override PATH ordering.
+[toolchain]
+channel = "stable"
+targets = ["wasm32-wasip1"]

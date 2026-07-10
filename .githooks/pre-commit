@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit — block a commit that would introduce a secret.
+#
+# Tracked in-repo (not in .git/hooks) so it travels with a clone. Activate once per
+# checkout with:   make hooks      (sets git config core.hooksPath .githooks)
+#
+# Scans the STAGED changes only (fast; what is about to be committed). AGENTS.md
+# "Secrets and Sensitive Data" mandates this gate; CHARTER.md keeps `make ci`'s
+# history scan as the comprehensive backstop.
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not installed — 'brew install gitleaks'." >&2
+  echo "            Refusing to commit without the secret-scan gate (see CHARTER.md)." >&2
+  exit 1
+fi
+
+if ! gitleaks git --staged --no-banner --redact; then
+  echo "pre-commit: secrets detected in staged changes — commit blocked." >&2
+  echo "            Remove the secret (Secret/Config Store, not the tree). If this is a" >&2
+  echo "            false positive, add a justified allowlist entry to .gitleaks.toml." >&2
+  exit 1
+fi

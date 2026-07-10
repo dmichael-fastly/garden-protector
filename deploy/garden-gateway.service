@@ -1,0 +1,24 @@
+[Unit]
+# Fastly Garden Protector — indoor Tier-1 gateway (garden node -> edge) on :8088.
+# __PLACEHOLDERS__ are filled in by deploy/install.sh.
+Description=Fastly Garden Protector indoor gateway (node -> edge) on :8088
+# Order after (and trigger) the git-pull oneshot so the gateway runs latest main.
+After=network-online.target garden-update.service
+Wants=network-online.target garden-update.service
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+# systemd creates/owns /var/lib/garden-protector (mode 0755, owned by User=) before
+# ExecStart — telemetry.py's default DB dir, so telemetry persists there instead of
+# falling back to ~/.local/state with a "Permission denied" warning.
+StateDirectory=garden-protector
+EnvironmentFile=-__DIR__/.env
+# --edge falls back to $GP_BACKEND (set in the .env / EnvironmentFile above).
+ExecStart=__PY__ __DIR__/hardware/gateway.py --listen 0.0.0.0:8088
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Alarms</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    main { max-width: var(--page-wide); margin: 0 auto; padding: 24px; }
+    .lp-intro { color: var(--text); font-size: 14px; line-height: 1.55; max-width: 760px; margin: 0 0 6px; }
+    .lp-intro .muted { color: var(--muted); }
+    .lp-sec { margin-top: 28px; }
+    .lp-sec h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+      margin: 0 0 14px; display: flex; align-items: center; gap: 7px; font-weight: 600; }
+    .lp-sec h2 .gp-ic { width: 15px; height: 15px; color: var(--brand); }
+    .lp-msg { color: var(--muted); font-size: 14px; padding: 18px 2px; }
+    /* filter chips (DaisyUI .btn-sm; .sel = active brand fill, JS-toggled) */
+    .lp-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .lp-chip.sel { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+    .lp-chip.sel:hover { background: var(--brand); border-color: var(--brand); }
+    /* selected tag in the determination control: tint the active btn semantically */
+    .lp-seg button.sel[data-fb="good"] { background: var(--green-dim); border-color: var(--green); color: var(--green-ink); }
+    .lp-seg button.sel[data-fb="neutral"] { background: var(--panel-3); border-color: var(--hairline); color: var(--text); }
+    .lp-seg button.sel[data-fb="bad"] { background: var(--red-dim); border-color: var(--red); color: var(--red-ink); }
+    /* recommendation cards (bespoke layout on the gp.css token surface) */
+    .lp-recs { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .lp-rec { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-md);
+      padding: 16px; box-shadow: var(--shadow-1); transition: box-shadow .15s ease, border-color .15s ease; }
+    .lp-rec:hover { box-shadow: var(--shadow-2); border-color: color-mix(in srgb, var(--brand) 30%, var(--hairline)); }
+    .lp-rec .sp { font-size: 15px; font-weight: 700; text-transform: capitalize; display: flex; align-items: center;
+      justify-content: space-between; gap: 8px; }
+    .lp-rec .pill { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: var(--radius-pill);
+      background: var(--panel-2); color: var(--muted); border: 1px solid var(--hairline); white-space: nowrap; }
+    .lp-rec .pill.up { background: var(--color-warning); color: var(--color-warning-content); border-color: var(--color-warning); }
+    .lp-rec .pill.down { background: var(--color-info); color: var(--color-info-content); border-color: var(--color-info); }
+    .lp-rec .tally { display: flex; gap: 12px; margin: 10px 0; font-size: 12.5px; font-weight: 600; }
+    .lp-rec .tally .g { color: var(--green-ink); } .lp-rec .tally .n { color: var(--muted); } .lp-rec .tally .b { color: var(--red-ink); }
+    .lp-rec .note { font-size: 13px; color: var(--text); line-height: 1.5; }
+    /* alarm list (bespoke row layout; controls inside use DaisyUI .btn/.join) */
+    .lp-row { display: grid; grid-template-columns: 76px 1fr auto; gap: 14px; align-items: center;
+      background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-md);
+      padding: 10px 12px; margin-bottom: 10px; box-shadow: var(--shadow-1);
+      transition: box-shadow .15s ease, border-color .15s ease; }
+    .lp-row:hover { box-shadow: var(--shadow-2); border-color: color-mix(in srgb, var(--brand) 26%, var(--hairline)); }
+    .lp-row .th { width: 76px; height: 57px; border-radius: var(--radius-sm); overflow: hidden; background: #000;
+      border: 1px solid var(--hairline); display: block; }
+    .lp-row .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .lp-row .meta { min-width: 0; }
+    .lp-row .meta .cap { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .lp-row .meta .cap a { color: inherit; text-decoration: none; }
+    .lp-row .meta .cap a:hover { text-decoration: underline; }
+    .lp-row .meta .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .lp-row .ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .lp-del:hover { color: var(--red-ink); }
+    .lp-del .gp-ic { width: 14px; height: 14px; }
+    /* read-only determination chip shown to non-admin viewers (bespoke, token-themed) */
+    .lp-badge { font-size: 11.5px; font-weight: 700; padding: 5px 11px; border-radius: var(--radius-pill); white-space: nowrap; }
+    .lp-badge.good { background: var(--color-success); color: var(--color-success-content); }
+    .lp-badge.neutral { background: var(--panel-2); color: var(--muted); border: 1px solid var(--hairline); }
+    .lp-badge.bad { background: var(--color-error); color: var(--color-error-content); }
+    .lp-badge.untagged { background: var(--panel-2); color: var(--muted); border: 1px dashed var(--hairline); }
+    /* cleanup card (admin) */
+    .lp-card .crow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+    .lp-card label { font-size: 13px; color: var(--muted); min-width: 130px; }
+    .lp-card input[type=number], .lp-card select { width: auto; }
+    .lp-card .msg { font-size: 12.5px; color: var(--muted); }
+    @media (max-width: 620px) {
+      main { padding: 16px; }
+      .lp-row { grid-template-columns: 64px 1fr; }
+      .lp-row .ctl { grid-column: 1 / -1; justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + controls come from the shared header partial -->
+  </header>
+
+  <main>
+    <p class="lp-intro">An <strong>alarm</strong> is a potential intruder — a trigger from a detector,
+      double-checked by your cameras. Mark each one <strong>good</strong> (a real alarm),
+      <strong>bad</strong> (a false alarm), or <strong>neutral</strong> (unsure).
+      <span class="muted">Your calls teach the garden what matters and tune how sure it must be before
+      it acts. Routine photos stay in <a href="/history">History</a>; only triggers show up here.</span></p>
+
+    <div class="lp-filters" id="lp-filters" style="display:none">
+      <button class="btn btn-sm btn-soft lp-chip sel" data-f="all" type="button">All</button>
+      <button class="btn btn-sm btn-soft lp-chip" data-f="untagged" type="button">Untagged</button>
+      <button class="btn btn-sm btn-soft lp-chip" data-f="good" type="button">Real (good)</button>
+      <button class="btn btn-sm btn-soft lp-chip" data-f="neutral" type="button">Unsure</button>
+      <button class="btn btn-sm btn-soft lp-chip" data-f="bad" type="button">False (bad)</button>
+    </div>
+    <div id="lp-alarms"></div>
+    <div class="lp-msg" id="lp-alarms-msg" style="display:none"></div>
+
+    <section class="lp-sec" id="lp-recs-sec" style="display:none">
+      <h2><svg class="gp-ic" aria-hidden="true"><use href="#gp-sparkle"/></svg> <span id="lp-recs-h">Tuning suggestions</span></h2>
+      <div class="lp-recs" id="lp-recs"></div>
+    </section>
+
+    <section class="lp-sec" id="lp-cleanup-sec" style="display:none">
+      <h2><svg class="gp-ic" aria-hidden="true"><use href="#gp-trash"/></svg> Alarm cleanup</h2>
+      <div class="card lp-card" style="max-width:640px">
+        <div class="crow">
+          <label for="lp-mode">Keep alarms by</label>
+          <select id="lp-mode" class="select select-sm">
+            <option value="days">How long (days)</option>
+            <option value="count">How many (newest)</option>
+          </select>
+        </div>
+        <div class="crow" id="lp-days-row">
+          <label for="lp-days">Keep alarms for</label>
+          <input type="number" id="lp-days" class="input input-sm" min="1" max="3650" value="90"><span class="msg">days</span>
+        </div>
+        <div class="crow" id="lp-count-row" style="display:none">
+          <label for="lp-count">Keep most recent</label>
+          <input type="number" id="lp-count" class="input input-sm" min="1" max="100000" value="500"><span class="msg">alarms</span>
+        </div>
+        <div class="crow">
+          <label for="lp-hour">Daily cleanup at</label>
+          <select id="lp-hour" class="select select-sm"></select><span class="msg">your garden's local time</span>
+        </div>
+        <div class="crow">
+          <button id="lp-save" class="btn btn-sm btn-primary" type="button">Save schedule</button>
+          <button id="lp-run" class="btn btn-sm" type="button">Clean up now</button>
+          <span id="lp-clean-msg" class="msg"></span>
+        </div>
+      </div>
+      <div class="card lp-card danger" style="max-width:640px;margin-top:14px">
+        <div class="alert alert-error alert-soft" role="alert" style="margin-bottom:12px">
+          <svg class="gp-ic" aria-hidden="true"><use href="#gp-alert"/></svg>
+          <span>Delete <b>every alarm</b> for this garden. This can't be undone (your History photos are untouched).</span>
+        </div>
+        <div class="crow">
+          <button id="lp-wipe" class="btn btn-sm btn-error" type="button">Delete all alarms&hellip;</button>
+          <span id="lp-wipe-msg" class="msg"></span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+    function speciesText(s) { return !s || s === "none" ? "Unlabeled" : s; }
+    function sysRead(a) { return a.action === "mitigate" ? "Deterrent fired" : "Flagged"; }
+    let CAN_MANAGE = false, CUR_PCT = 30, FILTER = "all", ALARMS = [];
+
+    function renderRecs(recs) {
+      const wrap = $("lp-recs"), sec = $("lp-recs-sec");
+      if (!recs.length) { sec.style.display = "none"; return; }
+      sec.style.display = "block";
+      $("lp-recs-h").textContent = "Tuning suggestions · acts at ≥ " + CUR_PCT + "% confidence today";
+      wrap.innerHTML = recs.map(function (r) {
+        let pill = '<span class="pill">No change</span>';
+        if (r.recommended_pct != null) {
+          const dir = r.recommended_pct > CUR_PCT ? "up" : "down";
+          pill = '<span class="pill ' + dir + '">' + (dir === "up" ? "↑" : "↓") + " ~" + r.recommended_pct + "%</span>";
+        }
+        return '<div class="lp-rec"><div class="sp"><span>' + esc(speciesText(r.species)) + "</span>" + pill + "</div>" +
+          '<div class="tally"><span class="g">' + r.good + " good</span><span class=\"n\">" + r.neutral +
+            " neutral</span><span class=\"b\">" + r.bad + " bad</span></div>" +
+          '<div class="note">' + esc(r.note) + "</div></div>";
+      }).join("");
+    }
+
+    function rowHtml(a) {
+      const ev = GP.archive.parseKey(a.key);
+      const when = ev ? (GP.archive.localDate(ev, { month: "short", day: "numeric" }) + " · " + GP.archive.localTime(ev)) : "";
+      const conf = a.confidence != null ? a.confidence + "%" : "—";
+      let ctl;
+      if (CAN_MANAGE) {
+        ctl = '<div class="lp-seg join" data-id="' + esc(a.id) + '">' +
+          ["good", "neutral", "bad"].map(function (l) {
+            return '<button type="button" class="btn btn-sm join-item' + (l === a.tag ? " sel" : "") + '" data-fb="' + l + '">' +
+              (l === "good" ? "Real" : l === "bad" ? "False" : "Unsure") + "</button>";
+          }).join("") + "</div>" +
+          '<button type="button" class="btn btn-sm btn-ghost lp-del" data-id="' + esc(a.id) + '">' + GP.svgUse("gp-trash") + " Delete</button>";
+      } else if (a.tag) {
+        ctl = '<span class="lp-badge ' + esc(a.tag) + '">' + (a.tag === "good" ? "Real" : a.tag === "bad" ? "False" : "Unsure") + "</span>";
+      } else {
+        ctl = '<div class="lp-seg join" data-id="' + esc(a.id) + '">' +
+          ["good", "neutral", "bad"].map(function (l) {
+            return '<button type="button" class="btn btn-sm join-item" data-fb="' + l + '">' + (l === "good" ? "Real" : l === "bad" ? "False" : "Unsure") + "</button>";
+          }).join("") + "</div>";
+      }
+      return '<div class="lp-row" data-id="' + esc(a.id) + '">' +
+        '<a class="th" href="/event?key=' + encodeURIComponent(a.key) + '"><img loading="lazy" src="' + GP.archive.imageUrl(a.key) + '" alt=""></a>' +
+        '<div class="meta"><div class="cap"><a href="/event?key=' + encodeURIComponent(a.key) + '">' +
+          esc(speciesText(a.species)) + " · " + esc(conf) + "</a></div>" +
+          '<div class="sub">' + esc(when) + " · " + esc(sysRead(a)) + " · " + esc(a.trigger_device || "") + "</div></div>" +
+        '<div class="ctl">' + ctl + "</div></div>";
+    }
+
+    function applyFilter(list) {
+      if (FILTER === "all") return list;
+      if (FILTER === "untagged") return list.filter(function (a) { return !a.tag; });
+      return list.filter(function (a) { return a.tag === FILTER; });
+    }
+
+    function renderAlarms() {
+      const wrap = $("lp-alarms"), msg = $("lp-alarms-msg");
+      $("lp-filters").style.display = ALARMS.length ? "flex" : "none";
+      const list = applyFilter(ALARMS);
+      if (!ALARMS.length) {
+        wrap.innerHTML = ""; msg.style.display = "block";
+        // Viewers (edge view-only) can't reach Gadgets, so don't link admin-only pages to
+        // them — give a viewer-appropriate message; admins keep the setup link.
+        msg.innerHTML = window.GP_VIEW_ONLY
+          ? "No alarms yet. When a trigger device (a camera, radar, or motion sensor) spots something, it shows up here."
+          : "No alarms yet. Mark a device as a trigger in <a href=\"/devices\">Gadgets</a> (edit → “Can trigger an alarm”), or add a radar/motion sensor — then its detections show up here.";
+        return;
+      }
+      if (!list.length) { wrap.innerHTML = ""; msg.style.display = "block"; msg.textContent = "No alarms match this filter."; return; }
+      msg.style.display = "none";
+      wrap.innerHTML = list.map(rowHtml).join("");
+      wireRows();
+    }
+
+    function wireRows() {
+      $("lp-alarms").querySelectorAll(".lp-seg").forEach(function (seg) {
+        const id = seg.dataset.id;
+        seg.querySelectorAll("button[data-fb]").forEach(function (b) {
+          b.addEventListener("click", async function () {
+            if (b.classList.contains("sel")) return;
+            seg.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
+            try { await GP.alarmTag(id, b.dataset.fb); await load(); }
+            catch (e) {
+              seg.querySelectorAll("button").forEach(function (x) { x.disabled = false; });
+              alert(e.status === 403 ? "Already judged — only an admin can change this."
+                : e.status === 401 ? "Please sign in." : "Couldn't save that.");
+            }
+          });
+        });
+      });
+      $("lp-alarms").querySelectorAll(".lp-del").forEach(function (btn) {
+        btn.addEventListener("click", async function () {
+          if (!confirm("Delete this alarm? This can't be undone.")) return;
+          btn.disabled = true;
+          try { await GP.alarmDelete(btn.dataset.id); await load(); }
+          catch (e) { btn.disabled = false; alert(e.status === 401 ? "Please sign in." : "Couldn't delete that alarm."); }
+        });
+      });
+    }
+
+    async function load() {
+      let data;
+      try {
+        const r = await fetch("/api/alarms", { cache: "no-store" });
+        if (r.status === 401) { location.assign("/login"); return; }
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        data = await r.json();
+      } catch (e) {
+        $("lp-alarms-msg").style.display = "block";
+        $("lp-alarms-msg").textContent = "Couldn't load alarms.";
+        return;
+      }
+      CAN_MANAGE = !!data.can_manage;
+      CUR_PCT = data.threshold_pct != null ? data.threshold_pct : CUR_PCT;
+      ALARMS = data.alarms || [];
+      renderAlarms();
+      renderRecs(data.recommendations || []);
+      if (CAN_MANAGE) initCleanup();
+    }
+
+    // Filter chips
+    $("lp-filters").querySelectorAll(".lp-chip").forEach(function (c) {
+      c.addEventListener("click", function () {
+        FILTER = c.dataset.f;
+        $("lp-filters").querySelectorAll(".lp-chip").forEach(function (x) { x.classList.toggle("sel", x === c); });
+        renderAlarms();
+      });
+    });
+
+    // ---- admin cleanup (retention) — portal endpoints, only on the admin tier ----
+    let cleanupReady = false;
+    async function initCleanup() {
+      const sec = $("lp-cleanup-sec");
+      sec.style.display = "block";
+      const hour = $("lp-hour");
+      if (!hour.options.length) for (let h = 0; h < 24; h++) { const o = document.createElement("option"); o.value = h; o.textContent = (h % 12 || 12) + (h < 12 ? " AM" : " PM"); hour.appendChild(o); }
+      $("lp-mode").onchange = function () {
+        const days = $("lp-mode").value === "days";
+        $("lp-days-row").style.display = days ? "flex" : "none";
+        $("lp-count-row").style.display = days ? "none" : "flex";
+      };
+      if (cleanupReady) return; cleanupReady = true;
+      try {
+        const r = await fetch("/api/alarms/settings", { cache: "no-store" });
+        if (r.ok) {
+          const s = await r.json();
+          $("lp-mode").value = s.mode || "days";
+          $("lp-days").value = s.keep_days || 90;
+          $("lp-count").value = s.keep_count || 500;
+          $("lp-hour").value = s.prune_hour != null ? s.prune_hour : 3;
+          $("lp-mode").onchange();
+        }
+      } catch (e) {}
+      $("lp-save").onclick = async function () {
+        const body = { mode: $("lp-mode").value, keep_days: parseInt($("lp-days").value, 10),
+          keep_count: parseInt($("lp-count").value, 10), prune_hour: parseInt($("lp-hour").value, 10) };
+        $("lp-clean-msg").textContent = "Saving…";
+        try { const r = await fetch("/api/settings/alarm-retention", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          $("lp-clean-msg").textContent = r.ok ? "Saved ✓" : "Couldn't save."; }
+        catch (e) { $("lp-clean-msg").textContent = "Couldn't save."; }
+      };
+      $("lp-run").onclick = async function () {
+        $("lp-clean-msg").textContent = "Cleaning up…";
+        try { const r = await fetch("/api/alarms/run-now", { method: "POST" }); const j = await r.json();
+          $("lp-clean-msg").textContent = r.ok ? ("Removed " + (j.deleted || 0) + " old alarm(s).") : "Cleanup failed."; await load(); }
+        catch (e) { $("lp-clean-msg").textContent = "Cleanup failed."; }
+      };
+      $("lp-wipe").onclick = async function () {
+        const gid = prompt("Type the garden name to delete ALL alarms:");
+        if (!gid) return;
+        $("lp-wipe-msg").textContent = "Deleting…";
+        try { const r = await fetch("/api/alarms/wipe-all", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: gid }) });
+          const j = await r.json();
+          $("lp-wipe-msg").textContent = r.ok ? ("Deleted " + (j.deleted || 0) + " alarm(s).") : (j.error || "Delete failed."); await load(); }
+        catch (e) { $("lp-wipe-msg").textContent = "Delete failed."; }
+      };
+    }
+
+    document.addEventListener("gp:tzchange", renderAlarms);
+    load();
+  </script>
+</body>
+</html>

@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Setup</title>
+  <!-- Fastly favicon — served at /favicon.ico (backed by repo-root favicon.ico) -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    /* box-sizing + body type + base reset come from gp.css (shared primitives). */
+    /* Header bar (grid, brand, h1.site, .leaf, .head-right, .pi-health, .theme-toggle)
+       fully provided by gp.css + header.bare — no local overrides needed. Buttons,
+       inputs, textareas + selects are DaisyUI now (.btn/.input/.textarea/.select);
+       the bare-element rules that used to style them here were dropped so DaisyUI wins. */
+    main { max-width: var(--page-narrow); margin: 0 auto; padding: 32px 16px 72px; }
+
+    /* ---- intro / page lead-in above the step rail ---- */
+    .wiz-lead { margin: 0 0 18px; }
+    .wiz-lead h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.3px;
+      display: flex; align-items: center; gap: 10px; }
+    .wiz-lead h1 .gp-ic { width: 26px; height: 26px; color: var(--brand); }
+    .wiz-lead p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+
+    /* ---- step rail (bespoke; DaisyUI-grade reskin) ----
+       .steps-ol is a semantic wrapper only; display:contents makes the <ol> invisible to
+       the flex layout so the <li.s> items participate directly in the flex container. */
+    .steps { display: flex; gap: 8px; margin: 0 0 24px; flex-wrap: wrap; }
+    .steps-ol { display: contents; list-style: none; margin: 0; padding: 0; }
+    .steps .s { flex: 1 1 0; min-width: 120px; font-size: 12px; font-weight: 600;
+      color: var(--muted); border-top: 3px solid var(--hairline); padding-top: 10px;
+      transition: color .15s ease, border-color .15s ease; }
+    .steps .s.active { color: var(--brand-link); border-top-color: var(--brand); }
+    .steps .s.done { color: var(--green-ink); border-top-color: var(--green); }
+
+    /* ---- card: the wizard panel. Reuse the gp.css .card surface, just retune the
+       inner heading (the gp.css .card h2 is an uppercase section label; the wizard
+       wants a proper friendly step title). ---- */
+    .card { padding: 26px; }
+    .card h2 { margin: 0 0 6px; font-size: 19px; font-weight: 700; letter-spacing: -0.2px;
+      text-transform: none; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .card h2 .gp-ic { width: 20px; height: 20px; color: var(--brand); }
+    .sub { color: var(--muted); font-size: 14px; margin: 0 0 22px; line-height: 1.55; }
+
+    /* Form caption labels (bespoke uppercase micro-label — NOT a DaisyUI control). The
+       bare <label> selector is safe: nothing here is converted to a DaisyUI label. */
+    label { display: block; font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .5px; margin: 16px 0 6px; }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .row { display: flex; gap: 14px; align-items: flex-end; }
+    .btns { display: flex; gap: 10px; margin-top: 26px; }
+    .err { color: var(--red-ink); font-size: 13px; min-height: 18px; margin-top: 10px; }
+
+    /* ---- detected-Pi key/value readout ---- */
+    .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 14px; font-size: 14px;
+      padding: 9px 0; border-bottom: 1px solid color-mix(in srgb, var(--hairline) 60%, transparent); }
+    .kv:last-of-type { border-bottom: 0; }
+    .kv .k { color: var(--muted); font-weight: 500; }
+    .kv .v { color: var(--text); word-break: break-word; }
+
+    /* ---- detected cameras ---- */
+    .cams { margin-top: 12px; display: grid; gap: 8px; }
+    .cam { display: flex; align-items: center; gap: 8px; background: var(--panel-2);
+      border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+      padding: 10px 14px; font-size: 13px; }
+    .cam .t { font-weight: 600; }
+    /* small inline status chip (bespoke; gp.css .gp-pill is the header-only chip). */
+    .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px;
+      border-radius: var(--radius-pill); background: color-mix(in srgb, var(--blue) 16%, transparent);
+      color: var(--blue-ink); border: 1px solid color-mix(in srgb, var(--blue) 38%, transparent);
+      margin-left: 6px; white-space: nowrap; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.5; }
+
+    /* ---- deploy log (bespoke terminal pane; reskinned, dark in both themes) ---- */
+    .log { display: none; background: var(--code-bg); color: #cbd5e1;
+      border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+      padding: 14px; font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 12px; line-height: 1.55; max-height: 320px; overflow: auto;
+      margin-top: 16px; white-space: pre-wrap; box-shadow: inset 0 1px 3px rgba(0,0,0,.35); }
+    :root[data-theme="light"] .log { background: #0b0f14; color: #cbd5e1; border-color: #0b0f14; }
+    .log.show { display: block; }
+    .log .l-cmd { color: #93c5fd; } .log .l-info { color: #cbd5e1; }
+    .log .l-warn { color: #fbbf24; } .log .l-error { color: #f87171; } .log .l-ok { color: #4ade80; }
+    .log > div { animation: fadein .18s ease-out; }
+    /* the newest in-progress line gets a blinking terminal cursor — a per-step heartbeat
+       so it's obvious work is happening even while a slow Fastly call is silent */
+    .log .l-active::after { content: "\258d"; margin-left: 3px; color: var(--amber);
+      animation: blink 1.1s steps(2, start) infinite; }
+    @keyframes blink { 50% { opacity: 0 } }
+    @keyframes fadein { from { opacity: 0; transform: translateY(2px) } to { opacity: 1; transform: none } }
+
+    /* ---- deploy spinner row ---- */
+    .spin { display: none; align-items: center; gap: 10px; color: var(--muted);
+      font-size: 13px; margin-top: 12px; }
+    .spin.show { display: flex; }
+    .spin .dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto;
+      border: 2px solid color-mix(in srgb, var(--brand) 30%, transparent);
+      border-top-color: var(--brand); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg) } }
+
+    /* Responsive overrides */
+    @media (max-width: 600px) {
+      main { padding: 20px 12px 56px; }
+      .card { padding: 18px; }
+      .wiz-lead h1 { font-size: 21px; }
+      .grid2 { grid-template-columns: 1fr; gap: 12px; }
+      .btns { flex-direction: column-reverse; gap: 12px; }
+      .btns .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header class="bare">
+    <div class="hd-brand">
+      <h1 class="site"><a href="/"><span class="leaf" aria-hidden="true"><svg class="gp-ic"><use href="#gp-leaf"/></svg></span> Fastly Garden Protector</a> — Setup</h1>
+      <div id="garden-name" class="garden-name"></div>
+    </div>
+    <div class="head-right">
+      <div id="pi-health" class="pi-health">
+        <span class="pi-health-item" title="Pi CPU Load">
+          <span class="pi-health-label">CPU</span>
+          <span id="cpu-val" class="pi-health-value">--%</span>
+        </span>
+        <span class="pi-health-item" title="Pi RAM Usage">
+          <span class="pi-health-label">RAM</span>
+          <span id="ram-val" class="pi-health-value">--%</span>
+        </span>
+      </div>
+      <select id="tz-select" class="tz-select" aria-label="Display timezone"></select>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme"></button>
+    </div>
+  </header>
+  <main>
+    <div class="wiz-lead">
+      <h1><svg class="gp-ic" aria-hidden="true"><use href="#gp-leaf"/></svg> Let's get your garden growing</h1>
+      <p>A few quick steps and your Raspberry Pi will be watching over the garden.</p>
+    </div>
+    <nav class="steps" id="steps" aria-label="Setup progress"></nav>
+    <div class="card" id="panel"></div>
+  </main>
+
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const STEPS = ["Detect", "Garden", "Fastly token", "Deploy"];
+    const state = { i: 0, detect: null, garden: {}, hasPasscode: false, hasToken: false };
+
+    function renderSteps() {
+      const total = STEPS.length;
+      $("steps").innerHTML = "<ol class='steps-ol'>" + STEPS.map((s, idx) => {
+        const done = idx < state.i, active = idx === state.i;
+        const stateWord = active ? "current step" : done ? "done" : "not started yet";
+        const cur = active ? ' aria-current="step"' : "";
+        return `<li class="s ${active ? "active" : (done ? "done" : "")}"${cur}>` +
+          `<span class="sr-only">Step ${idx + 1} of ${total}, ${stateWord}: </span>` +
+          `<span aria-hidden="true">${idx + 1}. </span>${s}</li>`;
+      }).join("") + "</ol>";
+    }
+
+    // ---- API helper: JSON in/out, with a passcode re-auth on 401 (resumed session lost) ----
+    async function api(method, path, body) {
+      const opt = { method, headers: {} };
+      if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+      let r = await fetch(path, opt);
+      if (r.status === 401) {
+        // Session lost / not signed in — hand off to the proper login page (which
+        // carries the "forgot passcode?" recovery). After sign-in it returns here.
+        window.location.href = "/login";
+        await new Promise(() => {});   // navigation pending; halt this call
+      }
+      const text = await r.text();
+      let data = {}; try { data = text ? JSON.parse(text) : {}; } catch (e) {}
+      if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+      return data;
+    }
+
+    // ---------- step renderers ----------
+    function go(i) { state.i = i; renderSteps(); render(); }
+
+    function render() {
+      const fns = [renderDetect, renderGarden, renderToken, renderDeploy];
+      fns[state.i]();
+    }
+
+    // PRE-WIZARD GATE (not a step): before any setup the operator must lock the
+    // admin page with a passcode. There is no step number, no rail, and no Back —
+    // it's a one-time gate. Once set we leave bootstrap mode and reload; the Pi
+    // then serves the login prompt and the operator signs in with the passcode
+    // they just chose. The wizard proper then begins at Detect.
+    function renderPasswordGate() {
+      $("steps").style.display = "none";
+      $("panel").innerHTML = `<h2>${GP.svgUse("gp-lock")} First things first</h2>
+        <p class="sub">Let's lock down this admin page with a passcode. You'll use it to sign in
+          from any device on your home network, so pick something only you know. As soon as it's
+          set we'll reload and ask you to sign in with it.</p>
+        <label>Admin passcode (min 6) *</label>
+        <input id="p-pass" class="input w-full" type="password" autocomplete="new-password" placeholder="choose a passcode">
+        <div class="err" id="p-err"></div>
+        <div class="btns"><button class="btn btn-primary" id="next">Set passcode &amp; continue</button></div>`;
+      const submit = async () => {
+        const pw = $("p-pass").value;
+        if (pw.length < 6) { $("p-err").textContent = "Passcode must be at least 6 characters."; return; }
+        $("next").disabled = true;
+        try {
+          await api("POST", "/api/wizard/passcode", { passcode: pw });
+          $("p-err").style.color = "var(--muted)";
+          $("p-err").textContent = "Passcode set — reloading to sign in…";
+          setTimeout(() => window.location.reload(), 900);
+        } catch (e) { $("next").disabled = false; $("p-err").textContent = e.message; }
+      };
+      $("next").onclick = submit;
+      $("p-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+    }
+
+    // Step 1 (index 0): Detect
+    async function renderDetect() {
+      const p = $("panel");
+      p.innerHTML = `<h2>${GP.svgUse("gp-system")} This Raspberry Pi</h2><p class="sub">Here's the little computer we're setting up. 🍓</p>
+        <div id="detect-body" class="hint">Taking a look…</div>
+        <div class="btns"><button class="btn btn-primary" id="next" disabled>Continue</button></div>`;
+      try {
+        const d = await api("GET", "/api/wizard/detect");
+        state.detect = d;
+        const pi = d.pi || {}, net = d.network || {}, h = d.health || {};
+        const cams = (d.cameras || []);
+        const gb = n => (n / 1e9).toFixed(1) + " GB";
+        const row = (k, v) => `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+
+        // Wi-Fi name + a friendly signal read-out.
+        let wifiV = net.ssid || "(wired / unknown)";
+        if (net.signal) {
+          const q = net.signal.quality_pct;
+          const word = q >= 66 ? "strong" : q >= 33 ? "ok" : "weak";
+          const dbm = net.signal.dbm != null ? ` · ${net.signal.dbm} dBm` : "";
+          wifiV += ` <span class="pill">${word}${dbm}</span>`;
+        }
+
+        // Optional health rows — only shown when the Pi reports them.
+        let healthHtml = "";
+        if (h.disk) healthHtml += row("Storage", `${gb(h.disk.free)} free of ${gb(h.disk.total)}`);
+        if (h.memory && h.memory.total) {
+          const avail = h.memory.available != null ? gb(h.memory.available) + " free of " : "";
+          healthHtml += row("Memory", `${avail}${gb(h.memory.total)}`);
+        }
+        if (h.cpu_temp_c != null) {
+          const hot = h.cpu_temp_c >= 70;
+          healthHtml += row("Temperature",
+            `<span style="color:${hot ? "var(--amber)" : "inherit"}">${h.cpu_temp_c} °C${hot ? " 🔥" : ""}</span>`);
+        }
+        if (h.power) {
+          const lowPower = h.power.under_voltage_now || h.power.under_voltage_occurred;
+          const throttled = h.power.throttled_now || h.power.throttled_occurred;
+          const msg = lowPower ? GP.svgUse("gp-warn", "warn") + " Low power — check the supply &amp; cable"
+            : throttled ? GP.svgUse("gp-warn", "warn") + " Has been running hot/slow"
+            : "Healthy " + GP.svgUse("gp-check", "good");
+          const warn = lowPower || throttled;
+          healthHtml += row("Power",
+            `<span style="color:${warn ? "var(--amber)" : "inherit"}">${msg}</span>`);
+        }
+
+        const camHtml = cams.length
+          ? `<div class="cams">${cams.map(c => `<div class="cam"><span class="t">${c.label || c.type}</span>
+               <span class="pill">${c.type}</span></div>`).join("")}</div>`
+          : `<div class="hint">No cameras spotted yet — you can add them after setup.</div>`;
+        $("detect-body").innerHTML =
+          row("Model", pi.model || "unknown") +
+          row("Name", d.mdns_name || pi.hostname || "—") +
+          row("OS", pi.os || "—") +
+          row("Wi-Fi", wifiV) +
+          row("Network address", `${net.ip || "—"} ${net.iface ? "(" + net.iface + ")" : ""}`) +
+          healthHtml +
+          `<label>Cameras found</label>${camHtml}`;
+        $("next").disabled = false;
+        $("next").onclick = () => go(1);
+      } catch (e) {
+        $("detect-body").innerHTML = `<div class="err">Hmm, couldn't read the Pi: ${e.message}</div>`;
+      }
+    }
+
+    // Step 2 (index 1): Garden details
+    // Countries we offer in the picker. Each has an ISO-2 code (passed to the
+    // geocoder + stored) and a display name. Codes WITHOUT a tailored layout below
+    // fall back to GENERIC — they still geocode by country, just with generic labels.
+    const COUNTRIES = [
+      ["US","United States"],["CA","Canada"],["GB","United Kingdom"],["IE","Ireland"],
+      ["AU","Australia"],["NZ","New Zealand"],["DE","Germany"],["FR","France"],
+      ["ES","Spain"],["IT","Italy"],["NL","Netherlands"],["BE","Belgium"],
+      ["CH","Switzerland"],["AT","Austria"],["PT","Portugal"],["SE","Sweden"],
+      ["NO","Norway"],["DK","Denmark"],["FI","Finland"],["PL","Poland"],
+      ["CZ","Czechia"],["GR","Greece"],["JP","Japan"],["CN","China"],
+      ["KR","South Korea"],["IN","India"],["SG","Singapore"],["HK","Hong Kong"],
+      ["BR","Brazil"],["MX","Mexico"],["AR","Argentina"],["CL","Chile"],
+      ["CO","Colombia"],["ZA","South Africa"],["NG","Nigeria"],["KE","Kenya"],
+      ["AE","United Arab Emirates"],["IL","Israel"],["TR","Türkiye"],["TH","Thailand"],
+      ["MY","Malaysia"],["ID","Indonesia"],["PH","Philippines"],["VN","Vietnam"],
+    ].map(([code, name]) => ({ code, name }));
+
+    // Per-country address layouts. Canonical keys (line1/line2/city/state/postcode)
+    // map cleanly to the geocoder; labels + ordering follow local convention. Each
+    // row is one or two fields; two fields share a row (.grid2).
+    const GENERIC = [
+      [{k:"line1", label:"Address line 1"}],
+      [{k:"line2", label:"Address line 2 (optional)", opt:true}],
+      [{k:"city", label:"City"}, {k:"state", label:"State / Province / Region (optional)", opt:true}],
+      [{k:"postcode", label:"Postal / ZIP code (optional)", opt:true}],
+    ];
+    const ADDR_FORMATS = {
+      US: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Apt, suite, etc. (optional)",opt:true}],
+           [{k:"city",label:"City"},{k:"state",label:"State"}],[{k:"postcode",label:"ZIP code"}]],
+      CA: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Apt, unit (optional)",opt:true}],
+           [{k:"city",label:"City"},{k:"state",label:"Province"}],[{k:"postcode",label:"Postal code"}]],
+      GB: [[{k:"line1",label:"Address line 1"}],[{k:"line2",label:"Address line 2 (optional)",opt:true}],
+           [{k:"city",label:"Town / City"}],[{k:"state",label:"County (optional)",opt:true}],[{k:"postcode",label:"Postcode"}]],
+      IE: [[{k:"line1",label:"Address line 1"}],[{k:"line2",label:"Address line 2 (optional)",opt:true}],
+           [{k:"city",label:"Town / City"},{k:"state",label:"County"}],[{k:"postcode",label:"Eircode (optional)",opt:true}]],
+      AU: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Unit, etc. (optional)",opt:true}],
+           [{k:"city",label:"Suburb"},{k:"state",label:"State / Territory"}],[{k:"postcode",label:"Postcode"}]],
+      NZ: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Suburb (optional)",opt:true}],
+           [{k:"city",label:"Town / City"}],[{k:"postcode",label:"Postcode"}]],
+      DE: [[{k:"line1",label:"Straße und Hausnummer (Street + number)"}],
+           [{k:"postcode",label:"PLZ"},{k:"city",label:"Stadt (City)"}]],
+      FR: [[{k:"line1",label:"Numéro et rue (Number + street)"}],
+           [{k:"postcode",label:"Code postal"},{k:"city",label:"Ville (City)"}]],
+      ES: [[{k:"line1",label:"Dirección (Address)"}],
+           [{k:"postcode",label:"Código postal"},{k:"city",label:"Ciudad (City)"}],[{k:"state",label:"Provincia (optional)",opt:true}]],
+      IT: [[{k:"line1",label:"Indirizzo (Address)"}],
+           [{k:"postcode",label:"CAP"},{k:"city",label:"Città (City)"}],[{k:"state",label:"Provincia"}]],
+      NL: [[{k:"line1",label:"Straat en huisnummer (Street + number)"}],
+           [{k:"postcode",label:"Postcode"},{k:"city",label:"Plaats (City)"}]],
+      JP: [[{k:"postcode",label:"郵便番号 (Postal code)"}],[{k:"state",label:"都道府県 (Prefecture)"}],
+           [{k:"city",label:"市区町村 (City / Ward)"}],[{k:"line1",label:"番地・建物 (Street / building)"}]],
+      IN: [[{k:"line1",label:"Address line 1"}],[{k:"line2",label:"Address line 2 (optional)",opt:true}],
+           [{k:"city",label:"City"},{k:"state",label:"State"}],[{k:"postcode",label:"PIN code"}]],
+      BR: [[{k:"line1",label:"Endereço (Address)"}],
+           [{k:"postcode",label:"CEP"},{k:"city",label:"Cidade (City)"}],[{k:"state",label:"Estado (State)"}]],
+      MX: [[{k:"line1",label:"Calle y número (Street + number)"}],
+           [{k:"postcode",label:"Código postal"},{k:"city",label:"Ciudad (City)"}],[{k:"state",label:"Estado (State)"}]],
+      ZA: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Suburb (optional)",opt:true}],
+           [{k:"city",label:"City / Town"}],[{k:"postcode",label:"Postal code"}]],
+    };
+    const addrLayout = cc => ADDR_FORMATS[cc] || GENERIC;
+    const countryName = cc => (COUNTRIES.find(c => c.code === cc) || {}).name || "";
+
+    function renderGarden() {
+      const g = state.garden || {};
+      const tz = g.tz || (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+      const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+      const region = (navigator.language || "").split("-")[1];
+      const cc0 = g.country || (COUNTRIES.some(c => c.code === region) ? region : "US");
+      const af0 = g.address_fields || {};
+
+      const fieldHtml = (f, val) =>
+        `<div><label>${f.label}</label><input id="af-${f.k}" class="input w-full" value="${esc(val)}"></div>`;
+      const layoutHtml = (cc, fields) => addrLayout(cc).map(rowDef => {
+        const cells = rowDef.map(f => fieldHtml(f, fields[f.k] || "")).join("");
+        return rowDef.length === 2 ? `<div class="grid2">${cells}</div>` : cells;
+      }).join("");
+      const opts = COUNTRIES.slice().sort((a, b) => a.name.localeCompare(b.name))
+        .map(c => `<option value="${c.code}" ${c.code === cc0 ? "selected" : ""}>${c.name}</option>`).join("");
+
+      $("panel").innerHTML = `<h2>${GP.svgUse("gp-leaf")} Garden details</h2>
+        <p class="sub">What should we call this garden, and where's it growing? 🌱</p>
+        <label>Name *</label><input id="g-name" class="input w-full" placeholder="Backyard" value="${esc(g.name)}">
+        <label>Country</label><select id="g-country" class="select w-full">${opts}</select>
+        <div id="g-addr-fields">${layoutHtml(cc0, af0)}</div>
+        <div style="margin-top:12px; display:none"><button class="btn btn-soft" id="g-geo" type="button">${GP.svgUse("gp-pin")} Find it on the map</button></div>
+        <div class="hint" id="g-geo-status" style="display:none"></div>
+        <div class="grid2" style="display:none">
+          <div><label>Latitude</label><input id="g-lat" class="input w-full" type="number" step="any" value="${g.lat ?? ""}"></div>
+          <div><label>Longitude</label><input id="g-lon" class="input w-full" type="number" step="any" value="${g.lon ?? ""}"></div>
+        </div>
+        <label>Time zone</label><input id="g-tz" class="input w-full" value="${esc(tz)}">
+        <label>Notes (just for you)</label><textarea id="g-notes" class="textarea w-full" placeholder="raised beds, north fence">${esc(g.notes)}</textarea>
+        <div class="err" id="g-err"></div>
+        <div class="btns"><button class="btn btn-ghost" id="back">Back</button>
+          <button class="btn btn-primary" id="next">Continue</button></div>`;
+
+      // Read the address fields for whatever country is selected right now.
+      const collectFields = () => {
+        const out = {};
+        addrLayout($("g-country").value).forEach(row => row.forEach(f => {
+          const el = $("af-" + f.k);
+          if (el && el.value.trim()) out[f.k] = el.value.trim();
+        }));
+        return out;
+      };
+
+      // Switching country swaps the field layout, carrying over anything already typed.
+      $("g-country").onchange = () => {
+        const keep = collectFields();
+        $("g-addr-fields").innerHTML = layoutHtml($("g-country").value, keep);
+      };
+
+      // Geocode the typed address → lat/lon, so nobody has to know their coordinates.
+      $("g-geo").onclick = async () => {
+        const cc = $("g-country").value, f = collectFields();
+        const street = [f.line1, f.line2].filter(Boolean).join(" ");
+        if (!street && !f.city && !f.postcode) {
+          $("g-geo-status").textContent = "Type your address above first, then I'll find it. 🔎";
+          return;
+        }
+        $("g-geo-status").textContent = "Looking it up…";
+        try {
+          const r = await api("POST", "/api/wizard/geocode",
+            { country: cc, street, city: f.city || "", state: f.state || "", postalcode: f.postcode || "" });
+          $("g-lat").value = r.lat; $("g-lon").value = r.lon;
+          $("g-geo-status").innerHTML = `${GP.svgUse("gp-pin")} Found: ${esc(r.display_name || (r.lat + ", " + r.lon))}`;
+        } catch (e) {
+          $("g-geo-status").textContent = "Couldn't pin that down — you can set latitude/longitude by hand below.";
+        }
+      };
+
+      $("back").onclick = () => go(0);
+      $("next").onclick = async () => {
+        const name = $("g-name").value.trim();
+        if (!name) { $("g-err").textContent = "Your garden needs a name. 🌿"; return; }
+        const cc = $("g-country").value, fields = collectFields();
+
+        // Behind the scenes automatic geocoding
+        const street = [fields.line1, fields.line2].filter(Boolean).join(" ");
+        if (street || fields.city || fields.postcode) {
+          try {
+            const r = await api("POST", "/api/wizard/geocode",
+              { country: cc, street, city: fields.city || "", state: fields.state || "", postalcode: fields.postcode || "" });
+            $("g-lat").value = r.lat;
+            $("g-lon").value = r.lon;
+          } catch (e) {
+            console.warn("Behind-the-scenes geocoding failed, preserving existing coords or null:", e);
+          }
+        }
+
+        const latV = $("g-lat").value, lonV = $("g-lon").value;
+        // One-line address (in local order) for the dashboard, plus the country name.
+        const parts = [];
+        addrLayout(cc).forEach(row => row.forEach(f => { if (fields[f.k]) parts.push(fields[f.k]); }));
+        const cname = countryName(cc); if (cname) parts.push(cname);
+        const body = {
+          name, country: cc,
+          address_fields: Object.keys(fields).length ? fields : null,
+          address: parts.join(", ") || null,
+          lat: latV === "" ? null : Number(latV), lon: lonV === "" ? null : Number(lonV),
+          tz: $("g-tz").value.trim() || null, notes: $("g-notes").value.trim() || null,
+        };
+        try {
+          const res = await api("POST", "/api/wizard/config", body);
+          state.garden = { ...body, garden_id: res.garden_id };
+          go(2);
+        } catch (e) { $("g-err").textContent = e.message; }
+      };
+    }
+
+    // Step 3 (index 2): Fastly token (the admin passcode was set in the pre-wizard gate)
+    function renderToken() {
+      $("panel").innerHTML = `<h2>${GP.svgUse("gp-cloud")} Connect Fastly</h2>
+        <p class="sub">Paste a Fastly API token so the Pi can deploy your garden to the edge.
+          The token is stored on the Pi only (0600) and never shown again.</p>
+        <label>Fastly API token *</label><input id="s-tok" class="input w-full" type="password" autocomplete="off" placeholder="paste your Fastly API token">
+        <div class="hint">Create one at manage.fastly.com → Account → API tokens.</div>
+        <div class="err" id="s-err"></div>
+        <div class="btns"><button class="btn btn-ghost" id="back">Back</button>
+          <button class="btn btn-primary" id="next">Save &amp; continue</button></div>`;
+      $("back").onclick = () => go(1);
+      $("next").onclick = async () => {
+        const tok = $("s-tok").value.trim();
+        if (!tok) { $("s-err").textContent = "A Fastly API token is required."; return; }
+        try {
+          await api("POST", "/api/wizard/token", { token: tok });
+          state.hasToken = true;
+          go(3);
+        } catch (e) { $("s-err").textContent = e.message; }
+      };
+    }
+
+    // Step 4 (index 3): Deploy (SSE) — wired to /api/wizard/provision/stream
+    let deployES = null, deployT0 = 0, deployTick = null;
+    function logLine(el, line, level) {
+      line = line.replace(/^\[gp-provision\]\s*/, "");   // drop the internal prefix; keep it friendly
+      const prev = el.querySelector(".l-active");          // only the newest in-progress line blinks
+      if (prev) prev.classList.remove("l-active");
+      const d = document.createElement("div");
+      d.className = "l-" + (level || "info");
+      d.innerHTML = GP.logIcon(level) + " ";   // colored level icon; message appended as text (no HTML injection)
+      d.appendChild(document.createTextNode(line));
+      // a start/info line is "in progress" until the next line arrives; done/warn/error don't blink
+      if (level !== "ok" && level !== "warn" && level !== "error") d.classList.add("l-active");
+      el.appendChild(d); el.scrollTop = el.scrollHeight;
+    }
+    function fmtElapsed(ms) {
+      const s = Math.floor(ms / 1000);
+      return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    }
+    function stopDeployTick(el) {
+      if (deployTick) { clearInterval(deployTick); deployTick = null; }
+      const a = el && el.querySelector(".l-active");
+      if (a) a.classList.remove("l-active");
+    }
+    function renderDeploy() {
+      const g = state.garden || {};
+      $("panel").innerHTML = `<h2>${GP.svgUse("gp-sparkle")} Create your garden</h2>
+        <p class="sub">Deploy the Fastly Compute service + CDN and create the garden
+          “${g.name || ""}”. This can take a minute or two.</p>
+        <div class="spin" id="spin"><span class="dot"></span><span id="spin-txt">Deploying… keep this page open.</span></div>
+        <div class="log" id="log"></div>
+        <div class="err" id="d-err"></div>
+        <div class="btns"><button class="btn btn-ghost" id="back">Back</button>
+          <button class="btn btn-primary" id="go">Create garden &amp; deploy</button></div>`;
+      $("back").onclick = () => { if (deployES) { deployES.close(); deployES = null; } stopDeployTick($("log")); go(2); };
+      $("go").onclick = startDeploy;
+    }
+    function startDeploy() {
+      const log = $("log"), spin = $("spin"), btn = $("go");
+      log.classList.add("show"); log.innerHTML = ""; spin.classList.add("show");
+      btn.disabled = true; $("back").disabled = true; $("d-err").textContent = "";
+      deployT0 = Date.now();   // live elapsed timer — a heartbeat that keeps moving during silent steps
+      const tick = () => { const t = $("spin-txt"); if (t) t.textContent = "Working… " + fmtElapsed(Date.now() - deployT0) + " — keep this page open."; };
+      tick(); deployTick = setInterval(tick, 1000);
+      deployES = new EventSource("/api/wizard/provision/stream");
+      deployES.onmessage = (ev) => { try { const d = JSON.parse(ev.data); if (d.line) logLine(log, d.line, d.level); } catch (e) {} };
+      deployES.addEventListener("done", (ev) => {
+        deployES.close(); deployES = null; stopDeployTick(log); spin.classList.remove("show");
+        let d = {}; try { d = JSON.parse(ev.data); } catch (e) {}
+        if (d.ok) {
+          logLine(log, "Garden created — opening your dashboard…", "ok");
+          setTimeout(() => { window.location.href = d.redirect || "/"; }, 1200);
+        } else {
+          $("d-err").textContent = "Deploy failed (exit " + (d.code != null ? d.code : "?") + "). Review the log above and retry.";
+          btn.disabled = false; $("back").disabled = false;
+        }
+      });
+      deployES.onerror = () => {
+        if (deployES) { deployES.close(); deployES = null; }
+        stopDeployTick(log); spin.classList.remove("show"); logLine(log, "connection closed", "warn");
+        btn.disabled = false; $("back").disabled = false;
+      };
+    }
+
+    // ---------- boot: resume from server state ----------
+    (async function boot() {
+      try {
+        const st = await api("GET", "/api/wizard/state");
+        const name = st && st.garden && st.garden.name;
+        if (name && $("garden-name")) $("garden-name").textContent = name;
+        if (st.provisioned) { window.location.href = "/"; return; }
+        state.hasPasscode = !!st.has_passcode;
+        state.hasToken = !!st.has_token;
+        if (st.garden && st.garden.name) state.garden = st.garden;
+        // No passcode yet -> show the pre-wizard gate (no step rail). Setting it
+        // reloads into /login; the wizard proper then starts at Detect.
+        if (!state.hasPasscode) { renderPasswordGate(); return; }
+        const map = { "detect": 0, "garden-details": 1, "token": 2, "deploy": 3, "devices": 3 };
+        state.i = map[st.step] != null ? map[st.step] : 0;
+      } catch (e) {
+        // No readable state (fresh Pi / no session) -> default to the gate.
+        renderPasswordGate(); return;
+      }
+      renderSteps(); render();
+      // Pi CPU/RAM in the header is driven by gp.js initPiHealth() (one shared, managed
+      // /api/system/stream, torn down on page hide) — no per-page stream here. See gp.js.
+    })();
+  </script>
+</body>
+</html>

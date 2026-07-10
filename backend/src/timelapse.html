@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Timelapse</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    main { max-width: var(--page-wide); margin: 0 auto; padding: 24px; }
+    .tl-head { margin: 0 0 20px; }
+    .tl-title { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; margin: 0; }
+    .tl-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+    /* filter bar (mirrors the History look) */
+    .tl-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 14px; margin-bottom: 20px; }
+    .tl-f { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+    /* one box per camera; all driven by the single timeline below */
+    .tl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .tl-box { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-md);
+      overflow: hidden; box-shadow: var(--shadow-1); transition: box-shadow .15s ease, border-color .15s ease; }
+    .tl-box:hover { box-shadow: var(--shadow-2); border-color: color-mix(in srgb, var(--brand) 30%, var(--hairline)); }
+    .tl-box .tl-name { font-size: 13px; font-weight: 600; padding: 11px 14px; border-bottom: 1px solid var(--hairline);
+      display: flex; align-items: center; gap: 8px; }
+    .tl-box .tl-name .gp-ic { color: var(--brand); }
+    .tl-stage { position: relative; background: #000; aspect-ratio: 4 / 3; display: flex;
+      align-items: center; justify-content: center; }
+    .tl-stage img { width: 100%; height: 100%; object-fit: contain; display: none; }
+    .tl-overlay { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 14px;
+      background: linear-gradient(transparent, rgba(0,0,0,.78)); color: #fff; font-size: 13px; }
+    .tl-overlay .a { font-weight: 700; display: flex; align-items: center; gap: 6px; }
+    .tl-overlay .a.sprayed { color: #ff8a8d; }
+    .tl-overlay .t { opacity: .85; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .tl-detail { position: absolute; top: 10px; right: 12px; font-size: 12px; font-weight: 600; color: #fff;
+      background: var(--scrim); padding: 5px 10px; border-radius: var(--radius-pill); text-decoration: none;
+      display: inline-flex; align-items: center; gap: 5px; backdrop-filter: blur(2px);
+      transition: background .12s ease; }
+    .tl-detail:hover { background: var(--scrim-strong); }
+    .tl-detail .gp-ic { width: 13px; height: 13px; }
+    .tl-ph { color: var(--muted); font-size: 13px; text-align: center; padding: 0 16px; }
+    /* the single shared transport */
+    .tl-transport { position: sticky; bottom: 16px; margin-top: 20px; padding: 14px 16px; z-index: 4;
+      background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(8px);
+      border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-2);
+      display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .tl-transport .gp-ic { width: 16px; height: 16px; }
+    .tl-prev .gp-ic { transform: scaleX(-1); }
+    .tl-scrub { flex: 1 1 220px; min-width: 160px; }
+    .tl-clock { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .tl-transport label { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 8px;
+      text-transform: none; }
+    .tl-msg { color: var(--muted); font-size: 14px; padding: 36px 4px; text-align: center; }
+    /* export panel (admin / Pi only) — one camera per file (no composite) */
+    .tl-export { margin-top: 20px; padding: 20px; background: var(--panel); border: 1px solid var(--hairline);
+      border-radius: var(--radius-md); box-shadow: var(--shadow-1);
+      display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; }
+    .tl-export h3 { width: 100%; margin: 0; font-size: 13px; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--muted); font-weight: 600; }
+    .tl-prog { width: 100%; font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .tl-bar { height: 8px; border-radius: var(--radius-pill); background: var(--panel-3); overflow: hidden; margin-top: 8px; }
+    .tl-bar > div { height: 100%; width: 0; background: var(--brand); transition: width .2s ease; }
+    .tl-dl { font-weight: 600; color: var(--brand-link); text-decoration: none; display: inline-flex;
+      align-items: center; gap: 6px; }
+    .tl-warn { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+    @media (max-width: 600px) { main { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + all controls (status, Pi health, tz, theme) come from the shared header partial -->
+  </header>
+
+  <main>
+    <section class="card full" style="background:transparent;border:0;box-shadow:none;padding:0">
+      <div class="tl-head">
+        <h1 class="tl-title">Timelapse</h1>
+        <div class="tl-sub">Play back your garden over time — every camera stays in sync on one shared timeline.</div>
+      </div>
+
+      <div class="tl-filters">
+        <label class="tl-f">Cameras
+          <select id="tl-cam" class="select select-sm w-full"><option value="">All cameras</option></select></label>
+        <label class="tl-f">Type
+          <select id="tl-type" class="select select-sm w-full">
+            <option value="">All</option>
+            <option value="sighting">Sightings</option>
+            <option value="sprayed">Sprayed</option>
+            <option value="clear">All clear</option>
+          </select></label>
+        <label class="tl-f">From <input type="date" id="tl-from" class="input input-sm"></label>
+        <label class="tl-f">To <input type="date" id="tl-to" class="input input-sm"></label>
+      </div>
+
+      <div id="tl-msg" class="tl-msg">Loading…</div>
+      <div id="tl-grid" class="tl-grid"></div>
+
+      <!-- ONE shared timeline drives every camera box in lockstep (time-aligned). -->
+      <div id="tl-transport" class="tl-transport" style="display:none">
+        <button id="tl-prev" class="tl-prev btn btn-ghost btn-sm" type="button" aria-label="Previous moment"></button>
+        <button id="tl-play" class="btn btn-success btn-sm" type="button"></button>
+        <button id="tl-next" class="btn btn-ghost btn-sm" type="button" aria-label="Next moment"></button>
+        <input type="range" id="tl-scrub" class="tl-scrub range range-primary range-sm" min="0" max="0" value="0" aria-label="Scrub timeline">
+        <span id="tl-clock" class="tl-clock">— / —</span>
+        <label>Speed <select id="tl-fps" class="select select-sm"></select></label>
+        <label><input type="checkbox" id="tl-loop" class="checkbox checkbox-sm" checked> Loop</label>
+      </div>
+
+      <!-- GIF/MP4 export — admin (Pi) only; one camera per file. -->
+      <div id="tl-export" class="tl-export" style="display:none">
+        <h3>Export a camera</h3>
+        <label class="tl-f">Camera <select id="tl-ecam" class="select select-sm"></select></label>
+        <label class="tl-f">Format
+          <select id="tl-fmt" class="select select-sm"><option value="gif">GIF</option><option value="mp4">MP4 (H.264)</option></select></label>
+        <label class="tl-f">Frame rate <select id="tl-efps" class="select select-sm"></select></label>
+        <label class="tl-f">Width
+          <select id="tl-width" class="select select-sm">
+            <option value="480">480px</option>
+            <option value="640" selected>640px</option>
+            <option value="960">960px</option>
+          </select></label>
+        <button id="tl-gen" class="btn btn-primary btn-sm" type="button">Generate</button>
+        <div class="tl-prog" id="tl-prog" role="status" aria-live="polite" aria-atomic="true" style="display:none">
+          <span id="tl-prog-txt"></span>
+          <div class="tl-bar"><div id="tl-prog-bar"></div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+    const VIEW_ONLY = !!window.GP_VIEW_ONLY;          // edge = play-only (no export panel)
+    const params = new URLSearchParams(location.search);
+
+    const TL_MAX_DAYS = 31;
+    const FPS_OPTS = [1, 2, 4, 8, 12, 24];
+    const DEFAULT_FPS = 1;
+
+    // ONE shared timeline: the sorted union of every shown camera's capture stamps. Each
+    // box shows the frame that camera HAD at the timeline's current moment (the latest frame
+    // with stamp <= now), so the cameras stay time-aligned even though they capture at
+    // different instants. A single play/pause/scrubber drives them all.
+    let boxes = [];                  // [{cam:{id,name}, frames:[...], img, overlayEls...}]
+    let timeline = [];               // sorted unique "YYYY-MM-DDTHH:MM:SS" stamps
+    let step = 0, playing = false, timer = null;
+    let dayList = [];
+    const camNameById = {};
+
+    function fps() { return Number($("tl-fps").value) || DEFAULT_FPS; }
+    function fillFps(sel, def) {
+      sel.innerHTML = "";
+      FPS_OPTS.forEach((f) => sel.appendChild(new Option(f + " fps", f, f === def, f === def)));
+    }
+    // A timelapse spans days, so label each moment with its date + time (not just time).
+    function stampLabel(ts) { const p = String(ts).split("T"); const ev = { date: p[0], time: p[1] }; return GP.archive.localDate(ev) + " · " + GP.archive.localTime(ev); }
+
+    async function loadCameras() {
+      try {
+        const r = await fetch("/api/cameras", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        (j.cameras || []).forEach((c) => { camNameById[c.device_id] = c.name || c.device_id; });
+      } catch (e) {}
+    }
+    function populateCamSelect() {
+      const sel = $("tl-cam");
+      Object.keys(camNameById)
+        .sort((a, b) => (camNameById[a] || a).localeCompare(camNameById[b] || b))
+        .forEach((did) => sel.appendChild(new Option(camNameById[did] || did, did)));
+      if (params.get("cam")) {
+        const v = params.get("cam");
+        if (!Array.from(sel.options).some((o) => o.value === v)) sel.appendChild(new Option(v, v));
+        sel.value = v;
+      }
+    }
+
+    // Build one camera box (label + stage). Returns its element + refs.
+    function makeBox(cam) {
+      const el = document.createElement("div");
+      el.className = "tl-box";
+      el.innerHTML =
+        '<div class="tl-name">' + GP.svgUse("gp-camera") + " " + esc(cam.name) + '</div>' +
+        '<div class="tl-stage">' +
+          '<img alt="' + esc(cam.name) + '">' +
+          '<a class="tl-detail" style="display:none"></a>' +
+          '<div class="tl-overlay" style="display:none"><div class="a"></div><div class="t"></div></div>' +
+          '<div class="tl-ph">waiting…</div>' +
+        '</div>';
+      return {
+        cam, el, frames: [],
+        img: el.querySelector("img"), overlay: el.querySelector(".tl-overlay"),
+        a: el.querySelector(".tl-overlay .a"), t: el.querySelector(".tl-overlay .t"),
+        detail: el.querySelector(".tl-detail"), ph: el.querySelector(".tl-ph"),
+      };
+    }
+
+    // Greatest frame with stamp <= ts (binary search over a stamp-sorted list), or null.
+    function frameAt(frames, ts) {
+      let lo = 0, hi = frames.length - 1, ans = -1;
+      while (lo <= hi) { const mid = (lo + hi) >> 1; if (GP.archive.stamp(frames[mid]) <= ts) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+      return ans >= 0 ? frames[ans] : null;
+    }
+
+    function renderBox(b, ts) {
+      const ev = frameAt(b.frames, ts);
+      if (!ev) {                       // this camera had no photo yet at this moment
+        b.img.style.display = "none"; b.overlay.style.display = "none"; b.detail.style.display = "none";
+        b.ph.style.display = "block"; b.ph.textContent = b.frames.length ? "no photo yet" : "no photos in range";
+        return;
+      }
+      b.img.src = GP.archive.imageUrl(ev.key); b.img.style.display = "block"; b.ph.style.display = "none";
+      b.a.className = "a " + GP.archive.type(ev); b.a.innerHTML = GP.archive.icon(ev) + " " + esc(GP.archive.caption(ev));
+      b.t.textContent = GP.archive.localDate(ev) + " · " + GP.archive.localTime(ev);
+      b.detail.href = "/event?key=" + encodeURIComponent(ev.key);
+      b.detail.innerHTML = GP.svgUse("gp-info") + " details";
+      b.detail.style.display = "inline-flex";
+      b.overlay.style.display = "block";
+    }
+
+    function renderStep() {
+      const ts = timeline[step]; if (ts == null) return;
+      boxes.forEach((b) => renderBox(b, ts));
+      $("tl-clock").textContent = (step + 1) + " / " + timeline.length + " · " + stampLabel(ts);
+      $("tl-scrub").value = String(step);
+      preload(step + 1);
+    }
+    function preload(from) {
+      for (let s = from; s < Math.min(from + 3, timeline.length); s++) {
+        const ts = timeline[s];
+        boxes.forEach((b) => { const ev = frameAt(b.frames, ts); if (ev) { const im = new Image(); im.src = GP.archive.imageUrl(ev.key); } });
+      }
+    }
+
+    function stopPlay() { playing = false; if (timer) { clearTimeout(timer); timer = null; }
+      $("tl-play").innerHTML = GP.svgUse("gp-play") + " Play"; $("tl-play").className = "btn btn-success btn-sm"; }
+    function startPlay() {
+      if (!timeline.length) return;
+      if (step >= timeline.length - 1) step = 0;
+      playing = true;
+      $("tl-play").innerHTML = GP.svgUse("gp-stop") + " Pause"; $("tl-play").className = "btn btn-warning btn-sm"; tick();
+    }
+    function tick() {
+      renderStep();
+      timer = setTimeout(() => {
+        if (!playing) return;
+        if (step >= timeline.length - 1) { if ($("tl-loop").checked) step = 0; else { stopPlay(); return; } }
+        else step++;
+        tick();
+      }, Math.round(1000 / fps()));
+    }
+    function togglePlay() { if (playing) stopPlay(); else startPlay(); }
+    function setStep(i) { step = Math.max(0, Math.min(i, timeline.length - 1)); renderStep(); }
+
+    async function loadAll(autoplay) {
+      stopPlay();
+      $("tl-transport").style.display = "none";
+      $("tl-grid").innerHTML = ""; boxes = []; timeline = [];
+      $("tl-msg").style.display = "block"; $("tl-msg").textContent = "Loading…";
+
+      const res = await GP.archive.fetchRange({
+        from: $("tl-from").value || null, to: $("tl-to").value || null,
+        cam: $("tl-cam").value, action: $("tl-type").value,
+        sort: "oldest", maxDays: TL_MAX_DAYS, days: dayList
+      });
+
+      // Group frames by camera; honor the roster order, fall back to whatever's in the data.
+      const byDev = {};
+      res.events.forEach((e) => { (byDev[e.device] = byDev[e.device] || []).push(e); });
+      let camIds = $("tl-cam").value ? [$("tl-cam").value] : Object.keys(camNameById);
+      if (!camIds.length) camIds = Object.keys(byDev);
+      camIds = camIds.filter((id) => (byDev[id] || []).length);   // only cameras with photos in range
+
+      if (!camIds.length) {
+        $("tl-msg").textContent = "No photos match these filters — widen the date range or pick a different camera.";
+        return;
+      }
+      $("tl-msg").style.display = "none";
+
+      // Build the unified timeline from every shown camera's stamps.
+      const stamps = new Set();
+      camIds.forEach((id) => byDev[id].forEach((e) => stamps.add(GP.archive.stamp(e))));
+      timeline = Array.from(stamps).sort();
+
+      const host = $("tl-grid");
+      camIds.forEach((id) => {
+        const b = makeBox({ id, name: camNameById[id] || id });
+        b.frames = byDev[id];                         // already oldest-first from fetchRange
+        boxes.push(b); host.appendChild(b.el);
+      });
+
+      $("tl-transport").style.display = "flex";
+      $("tl-scrub").max = String(timeline.length - 1);
+
+      // Jump to the moment of the "timelapse from here" frame, if given.
+      step = 0;
+      const start = params.get("start");
+      if (start) {
+        let sStamp = null;
+        for (const id of camIds) { const f = byDev[id].find((e) => e.key === start); if (f) { sStamp = GP.archive.stamp(f); break; } }
+        if (sStamp) { const at = timeline.indexOf(sStamp); if (at >= 0) step = at; }
+        params.delete("start");
+      }
+      renderStep();
+      if (autoplay) startPlay();
+      if (!VIEW_ONLY) refreshExportCams(camIds);
+    }
+
+    // ---------- export (admin / Pi only): one camera per file ----------
+    function refreshExportCams(camIds) {
+      const sel = $("tl-ecam"); sel.innerHTML = "";
+      camIds.forEach((id) => sel.appendChild(new Option(camNameById[id] || id, id)));
+    }
+    function exportBody() {
+      return {
+        from: $("tl-from").value || null, to: $("tl-to").value || null,
+        cam: $("tl-ecam").value, action: $("tl-type").value,
+        fps: Number($("tl-efps").value) || DEFAULT_FPS,
+        format: $("tl-fmt").value, width: Number($("tl-width").value) || 640
+      };
+    }
+    let exportPoll = null;
+    function setProg(txt, frac) {
+      $("tl-prog").style.display = "block";
+      $("tl-prog-txt").innerHTML = txt;
+      $("tl-prog-bar").style.width = Math.round((frac || 0) * 100) + "%";
+    }
+    async function generate() {
+      if (!$("tl-ecam").value) { setProg("Pick a camera to export.", 0); return; }
+      if (exportPoll) { exportPoll(); exportPoll = null; }
+      $("tl-gen").disabled = true;
+      setProg("Starting render…", 0);
+      let job;
+      try {
+        const r = await GP.api("/api/timelapse/render", { json: exportBody() });
+        job = r && r.job_id;
+      } catch (e) {
+        $("tl-gen").disabled = false;
+        setProg(e && e.status === 429 ? "A render is already running — try again shortly." :
+          "Couldn't start the render: " + esc((e && e.data && e.data.error) || e.message || "error"), 0);
+        return;
+      }
+      if (!job) { $("tl-gen").disabled = false; setProg("Couldn't start the render.", 0); return; }
+      exportPoll = GP.poll(async () => {
+        let st;
+        try { st = await GP.api("/api/timelapse/status?job=" + encodeURIComponent(job)); } catch (e) { return; }
+        const total = st.total || 0, done = st.frames_done || 0;
+        if (st.state === "done") {
+          if (exportPoll) { exportPoll(); exportPoll = null; }
+          $("tl-gen").disabled = false;
+          const kb = st.bytes ? " (" + Math.round(st.bytes / 1024) + " KB)" : "";
+          const href = "/api/timelapse/download?job=" + encodeURIComponent(job);
+          // Auto-download the moment it's ready (the endpoint sends it as an attachment);
+          // keep a manual link too in case the browser blocks the programmatic click.
+          try {
+            const link = document.createElement("a");
+            link.href = href; link.download = "";
+            document.body.appendChild(link); link.click(); link.remove();
+          } catch (e) {}
+          let note = "";
+          if (st.capped_partial) note = '<div class="tl-warn">Heads up: some busy days had more photos than we could pull, so this timelapse skips a few.</div>';
+          else if (st.capped_frames || st.capped_days) note = '<div class="tl-warn">Heads up: this covers a lot of ground — we kept the most recent frames, so the very start may be trimmed.</div>';
+          setProg('Saved ✓ — ' + done + ' frames. <a class="tl-dl" href="' + href + '">' +
+            GP.svgUse("gp-upload") + " Download " + esc(String(st.format || "").toUpperCase()) + kb + "</a> again" + note, 1);
+        } else if (st.state === "error") {
+          if (exportPoll) { exportPoll(); exportPoll = null; }
+          $("tl-gen").disabled = false;
+          setProg("Render failed: " + esc(st.error || "unknown error"), 0);
+        } else {
+          setProg("Rendering… " + done + (total ? " / " + total : "") + " frames", total ? done / total : 0);
+        }
+      }, 1000);
+    }
+
+    async function init() {
+      fillFps($("tl-fps"), DEFAULT_FPS);
+      if (params.get("action")) $("tl-type").value = params.get("action");
+      await loadCameras();
+      populateCamSelect();
+      dayList = await GP.archive.days();
+      const from = $("tl-from"), to = $("tl-to");
+      if (dayList.length) {
+        from.min = to.min = dayList[dayList.length - 1];
+        from.max = to.max = dayList[0];
+        from.value = params.get("from") || dayList[0];
+        to.value = params.get("to") || dayList[0];
+      } else {
+        from.value = params.get("from") || ""; to.value = params.get("to") || "";
+      }
+      // transport wiring (single, shared)
+      $("tl-play").addEventListener("click", togglePlay);
+      $("tl-prev").innerHTML = GP.svgUse("gp-step");
+      $("tl-next").innerHTML = GP.svgUse("gp-step");
+      $("tl-prev").addEventListener("click", () => { stopPlay(); setStep(step - 1); });
+      $("tl-next").addEventListener("click", () => { stopPlay(); setStep(step + 1); });
+      $("tl-scrub").addEventListener("input", () => { stopPlay(); setStep(Number($("tl-scrub").value)); });
+      $("tl-fps").addEventListener("change", () => { if (playing) { clearTimeout(timer); tick(); } });
+      $("tl-cam").addEventListener("change", () => loadAll(true));
+      $("tl-type").addEventListener("change", () => loadAll(true));
+      from.addEventListener("change", () => { if (to.value && from.value > to.value) to.value = from.value; loadAll(true); });
+      to.addEventListener("change", () => { if (from.value && to.value < from.value) from.value = to.value; loadAll(true); });
+      document.addEventListener("keydown", (e) => {
+        if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+        if (e.key === " ") { e.preventDefault(); togglePlay(); }
+        else if (e.key === "ArrowLeft") { stopPlay(); setStep(step - 1); }
+        else if (e.key === "ArrowRight") { stopPlay(); setStep(step + 1); }
+      });
+      if (!VIEW_ONLY) {
+        $("tl-export").style.display = "flex";
+        fillFps($("tl-efps"), DEFAULT_FPS);
+        $("tl-gen").addEventListener("click", generate);
+      }
+      loadAll(true);
+    }
+    init();
+  </script>
+  <script>
+    // The viewer switched display timezone. Day buckets are zone-derived, so re-seat the date
+    // inputs in the new zone (keeping the current selection if it's still a valid local day)
+    // and reload — which rebuilds the timeline and repaints every on-frame timestamp.
+    document.addEventListener("gp:tzchange", async function () {
+      dayList = await GP.archive.days();
+      const from = $("tl-from"), to = $("tl-to");
+      if (dayList.length) {
+        from.min = to.min = dayList[dayList.length - 1];
+        from.max = to.max = dayList[0];
+        if (!dayList.includes(from.value)) from.value = dayList[0];
+        if (!dayList.includes(to.value)) to.value = dayList[0];
+      }
+      loadAll(true);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+/* ui/tailwind/input.css — the Tailwind v4 + DaisyUI v5 build INPUT.
+ *
+ * `make css` compiles this into the committed, minified ui/static/app.css that ALL
+ * THREE tiers serve (the Fastly Compute edge bakes it via include_str!, the Pi portal
+ * + admin console read it from disk). Node/Tailwind/DaisyUI are a BUILD-TIME ONLY
+ * dependency — they never touch the Pi or the wasm at runtime. `make css-check` diffs a
+ * fresh build against the committed app.css so editing a template without rebuilding
+ * fails CI (the same drift-gate pattern as `make gen`).
+ *
+ * THEME: we use DaisyUI's BUILT-IN garden-family themes — "garden" (light) + "forest"
+ * (dark green) — a real, recognizable, professionally-designed theme that fits a garden
+ * app. gp.css derives ALL its surface/text/semantic tokens from the active theme's CSS
+ * vars, so the whole app (DaisyUI components AND the gp.css bridge components) follows one
+ * theme cohesively. gp.js maps its light/dark PREFERENCE to data-theme="garden"/"forest"
+ * pre-paint. To switch themes: change the `themes:` list below + the two theme-name
+ * strings in gp.js (pre-paint IIFE + applyTheme).
+ */
+
+/* source(none): disable Tailwind's automatic content detection and scan EXACTLY the
+ * files listed below, so the purge is deterministic (required for the css-check drift
+ * gate) and never sweeps in stray repo files. Paths are relative to THIS file. */
+@import "tailwindcss" source(none);
+
+/* Enable DaisyUI's built-in light + dark themes (light default, dark on prefers-dark).
+ * exclude the components gp.css owns as JS-coupled bridges (.card/.badge/.modal/.toast/
+ * .hero/.steps/.label). CRITICAL: DaisyUI components live in @layer and gp.css is
+ * unlayered, so gp.css wins for the properties it DECLARES — but DaisyUI's OTHER
+ * properties (display/height/white-space/visibility/opacity) LEAK into our same-named
+ * elements and break them (a .badge metric tile gets crushed into DaisyUI's 25px inline
+ * chip; a .modal overlay inherits opacity:0/visibility:hidden and renders invisible).
+ * Excluding them removes the collision entirely. */
+@plugin "daisyui" {
+  themes: garden --default, forest --prefersdark;
+  exclude: card, badge, modal, toast, hero, steps, label;
+}
+
+@source "../../backend/src/*.html";
+@source "../../hardware/*.html";
+@source "../../provision/*.html";
+@source "../../ui/static/gp.js";        /* class names referenced in JS string literals */
+
+/* Safelist classes the JS BUILDS dynamically (concatenated fragments the scanner can't
+ * see). gp.js maps severities/levels to color modifiers, and the restyled templates
+ * build badge/alert/btn color variants at runtime. Keep this in sync as templates grow. */
+@source inline("{badge,alert,btn,text,bg,border}-{primary,success,error,warning,info,neutral}");
+@source inline("badge-soft badge-outline badge-ghost alert-soft btn-soft btn-outline btn-ghost");
+@source inline("loading loading-spinner loading-dots loading-sm loading-md");
+@source inline("hidden block flex grid");
+
+/* Garden identity: a consistent leafy GREEN primary across both garden-family themes.
+ * (forest ships a green primary; garden ships a pink one — unify to green so the leaf
+ * logo + primary CTAs + active nav read "garden" in BOTH light and dark.) Dark content
+ * sits on the bright green for AA contrast. Everything else stays the stock theme. */
+[data-theme="garden"], [data-theme="forest"] {
+  --color-primary: oklch(68.628% 0.185 148.958);
+  --color-primary-content: oklch(16% 0.03 150);
+}

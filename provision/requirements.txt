@@ -1,0 +1,8 @@
+# gp-provision control-plane deps. The setup wizard runs gp-provision ON THE PI
+# (the Pi self-provisions), so these must be installed in the Pi's service venv —
+# deploy/update.sh installs this on boot alongside hardware/requirements.txt.
+typer>=0.9.0
+rich>=13.0.0
+boto3>=1.26.0
+tenacity>=8.0.0
+requests>=2.28.0

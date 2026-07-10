@@ -1,0 +1,15 @@
+[Unit]
+# Fastly Garden Protector — pull latest origin/main BEFORE the services start.
+# Pulled in as a dependency of garden-portal/garden-gateway (their Wants=/After=),
+# so it runs once at boot and again on any `systemctl restart` of those units.
+# Best-effort: deploy/update.sh always exits 0, so a failed pull never blocks boot.
+# __PLACEHOLDERS__ are filled in by deploy/install.sh.
+Description=Fastly Garden Protector — pull latest main before services start
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/deploy/update.sh

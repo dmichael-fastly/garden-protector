@@ -1,0 +1,30 @@
+[Unit]
+# Fastly Garden Protector — single-owner camera daemon. Owns the directly-attached
+# Pi cameras (CSI ribbon / USB UVC), serves the LIVE LAN MJPEG feed the Gadgets page
+# embeds, AND pushes a still to the edge for AI classification/history. The push
+# cadence + photo quality are user settings (Storage page, default a photo every 30s)
+# that the daemon hot-reloads — no --interval flag here, and no restart to change them.
+# A camera can be opened by only ONE process, so this MUST be the sole owner.
+# __PLACEHOLDERS__ are filled in by deploy/install.sh.
+Description=Fastly Garden Protector camera daemon (live MJPEG + edge push)
+# Order after (and trigger) the git-pull oneshot so it runs latest main.
+After=network-online.target garden-update.service
+Wants=network-online.target garden-update.service
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+# `-` => a missing .env is not fatal; --auto reads garden/token/backend + the
+# camera list from configs/ (pi-garden.json / secrets.json / *-registry.json),
+# which is the authoritative source — NOT the legacy .env.
+EnvironmentFile=-__DIR__/.env
+ExecStart=__PY__ __DIR__/hardware/camera_daemon.py --auto --listen 127.0.0.1:8090
+# CSI/USB capture needs the `video` group (the dma_heap udev rule install.sh adds
+# grants it); the service user must be a member.
+SupplementaryGroups=video
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

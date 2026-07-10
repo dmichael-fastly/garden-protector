@@ -1,0 +1,14 @@
+{
+  "name": "garden-protector-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build-time UI toolchain for Garden Protector: Tailwind CSS v4 + DaisyUI v5 compile the committed ui/static/app.css that all three tiers serve. Node is a DEV/CI dependency only — it never ships to the Raspberry Pi or to Fastly Compute, which serve the committed CSS artifact.",
+  "scripts": {
+    "css": "tailwindcss -i ui/tailwind/input.css -o ui/static/app.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.1",
+    "daisyui": "5.5.23",
+    "tailwindcss": "4.3.1"
+  }
+}

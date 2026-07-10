@@ -1,0 +1,43 @@
+# constraints.txt — pinned, known-good Python dependency versions.
+# See CHARTER.md "Standing decisions → Pinned toolchains".
+#
+# This is the Python analogue of Cargo.lock. The per-tier requirements files
+# (hardware/requirements.txt, provision/requirements.txt) keep `>=` FLOORS so a
+# platform without a matching wheel can still install the core; this file freezes
+# the exact versions the test suite is verified green against. Install with:
+#
+#     pip install -r hardware/requirements.txt   -c constraints.txt
+#     pip install -r provision/requirements.txt  -c constraints.txt
+#
+# A constraint only pins a version IF that package is being installed (directly or
+# transitively); it never forces an install on its own. (deploy/update.sh passes
+# this file on the Pi.)
+#
+# Regenerate after an intentional bump:  pip freeze | grep -iE '<pkg>=='
+
+# --- required (core runtime + control plane + tests) ---
+requests==2.32.3
+typer==0.26.7
+rich==14.3.4
+boto3==1.43.9
+tenacity==9.1.4
+pytest==9.0.3
+responses==0.26.1
+hypothesis==6.152.9
+
+# key transitive deps, pinned for reproducibility
+botocore==1.43.23
+click==8.4.0
+urllib3==2.2.2
+certifi==2024.6.2
+
+# --- optional (graceful-degrade; absent on some platforms is fine) ---
+# These stay `>=` floors in the requirements files and the code degrades when they
+# are missing (no Pillow -> no synthetic scenes; no zeroconf -> no mDNS). Pinned
+# here only so that WHEN present they are reproducible; drop a line if a platform
+# (e.g. a Pi arch) has no matching wheel.
+Pillow==12.2.0
+# zeroconf / send2trash are Pi-side optionals not installed in the dev/test env;
+# pin them on the Pi by uncommenting once a known-good version is chosen:
+# zeroconf==0.131.0
+# send2trash==1.8.2

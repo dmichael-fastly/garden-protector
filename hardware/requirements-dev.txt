@@ -1,0 +1,19 @@
+# hardware/requirements-dev.txt — TEST/CI-only Python deps.
+#
+# Deliberately NOT installed on the field device: the Pi deploy path
+# (deploy/install.sh + deploy/update.sh) installs only hardware/requirements.txt
+# (runtime) + provision/requirements.txt (the on-Pi gp-provision control plane).
+# These packages are imported solely by tests/* — keeping them out of the service
+# venv is the "minimal footprint" mission (PI-002): no test runner gets re-resolved
+# on the unattended outdoor Pi on every boot/restart.
+#
+# CI installs this file (see .github/workflows/ci.yml); local `make ci` runs
+# `python3 -m pytest`, so install it once into your dev/test venv:
+#
+#     pip install -r hardware/requirements-dev.txt -c constraints.txt
+#
+# `>=` floors here, exact pins in constraints.txt (the Python Cargo.lock).
+pytest>=7.0.0
+responses>=0.21.0
+# Property-based fail-closed invariant tests (tests/test_safety_properties.py).
+hypothesis>=6.0.0

@@ -1,0 +1,46 @@
+.DS_Store
+
+# Python Cache & Testing files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.hypothesis/
+.cache/
+
+# Node build-time toolchain (Tailwind + DaisyUI). Build-time ONLY — the committed
+# ui/static/app.css is what the Pi + Compute serve; node_modules never ships.
+node_modules/
+
+# Rust Build Artifacts
+backend/target/
+**/*.rs.bk
+
+# Fastly Compute Package Artifacts
+backend/pkg/
+backend/bin/
+
+# Large ML Weights / KV Store Local weights (any stray copies)
+*.onnx
+
+# Local probe output
+camera_probe_out/
+
+# gp-provision control-plane secrets + state (live FOS keys, cdn_secret, the
+# Fastly admin token, and per-device Pi tokens). NEVER commit these.
+configs/*
+!configs/.gitkeep
+setup-state.json
+*.env
+
+# Local Claude Code config (custom subagents, settings) — keep in the project
+# working copy but never tracked.
+.claude/
+
+# Working images (breadboard diagrams, screenshots, etc.)
+*.svg
+/breadboard-*.png
+/radar-*.png
+/results.png
+/HUAREW-*.png
+

@@ -1,0 +1,39 @@
+<!-- Shared header (brand + garden name + nav + live status + Pi health + controls) —
+     SINGLE SOURCE OF TRUTH for the header MARKUP, spliced at the PORTAL_HEADER sentinel by
+     BOTH tiers (hardware/portal.py render_header + backend/src/main.rs fill_header_active).
+     ALL header styling lives in ui/static/gp.css (the "shared header partial" block).
+     The three top-level zones below map to a 3-column grid (brand | nav | controls) so
+     the nav is CENTERED identically on EVERY page, regardless of which controls show.
+     Do not add per-page header chrome in the page templates — add it here. -->
+<div class="hd-brand">
+  <h1 class="site"><a href="/"><span class="leaf" aria-hidden="true"><svg class="gp-ic"><use href="#gp-leaf"/></svg></span> Fastly Garden Protector</a></h1>
+  <div id="garden-name" class="garden-name">__GARDEN_NAME__</div>
+</div>
+<!-- Nav links rendered SERVER-SIDE from the single nav model (contract/spec.toml ->
+     contract_gen::render_nav / contract_gen.render_nav). Admin links are OMITTED (not
+     hidden) for view-only viewers, so they never reach the public edge HTML. -->
+<nav id="portal-nav" class="portal"><!--NAV_LINKS--></nav>
+<!-- Right-hand controls, identical on every page. gp.js auto-wires all of these on
+     DOMContentLoaded (initStatusPills / initPiHealth / the live-state feed / initTz /
+     initTheme); the page templates carry no header JS of their own. -->
+<div class="hd-right">
+  <!-- Live garden safety state. ONE mode pill (OFF / MONITOR / ACTIVE, with SPRAYING +
+       HELD·rain layered on top of ACTIVE) populated by GP.subscribeState(); renders "—"
+       until the first state snapshot arrives. STATUS-ONLY badge on every tier — it is NOT
+       clickable. The labeled controls live on the dashboard (the OFF/MONITOR/ACTIVE
+       selector + the per-event "Stop this spray" button). -->
+  <div id="portal-status" class="portal-status" role="status" aria-live="polite">
+    <span id="pill-mode" class="gp-pill mode"><svg class="gp-ic" aria-hidden="true"><use href="#gp-shield"/></svg><span class="t">&mdash;</span></span>
+  </div>
+  <!-- Pi CPU / RAM, streamed from /api/system/stream by gp.js initPiHealth(). Admin/Pi
+       only: stays hidden on the view-only edge (no system feed there) and reveals itself
+       only once a real sample arrives. Fixed-width values (gp.css) so it never reflows. -->
+  <div id="pi-health" class="pi-health">
+    <span class="pi-health-item" title="Pi CPU Load"><span class="pi-health-label">CPU</span><span id="cpu-val" class="pi-health-value">--%</span></span>
+    <span class="pi-health-item" title="Pi RAM Usage"><span class="pi-health-label">RAM</span><span id="ram-val" class="pi-health-value">--%</span></span>
+  </div>
+  <!-- Live-feed connection indicator, driven by the shared state feed in gp.js. -->
+  <div id="conn" class="conn"><span class="dot"></span><span id="conn-text">connecting&hellip;</span></div>
+  <select id="tz-select" class="tz-select" aria-label="Display timezone"></select>
+  <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle theme">&#9680;</button>
+</div>

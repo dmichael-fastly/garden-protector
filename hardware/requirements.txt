@@ -1,0 +1,24 @@
+# hardware/requirements.txt — RUNTIME deps for the Pi tier (portal/gateway/camera/
+# discovery). This is what the field device installs on every boot/restart via
+# deploy/install.sh + deploy/update.sh, so keep it to what the running code needs.
+#
+# Test-only deps (pytest/responses/hypothesis) live in hardware/requirements-dev.txt
+# and are installed by CI only — never shipped to the unattended outdoor Pi (PI-002).
+#
+# `>=` FLOORS (so a Pi arch with no matching wheel can still install the core);
+# constraints.txt (repo root) carries the exact pins the test suite is green against.
+requests>=2.28.0
+# Synthetic scene rendering for the node simulator (hardware/node_sim.py,
+# hardware/scenes.py). Only the simulator needs it; the real client does not —
+# optional, the code degrades gracefully when it is absent.
+Pillow>=9.0.0
+# mDNS device discovery: the Pi's setup wizard browses _gpnode._tcp
+# (hardware/discovery.py) and the node simulator advertises it (hardware/node_sim.py).
+# Optional everywhere — absent (Mac/CI) means no mDNS, the code degrades gracefully.
+zeroconf>=0.131.0
+# NOT imported by us. Raspberry Pi OS ships Send2Trash 1.8.1b0 system-wide with
+# malformed metadata (`sys-platform (=="darwin")`); our --system-site-packages venv
+# inherits it, so every `pip install` during deploy/restart.sh prints a noisy
+# "Error parsing dependencies of send2trash" WARNING. Installing a fixed version
+# into the venv shadows the broken system copy and silences the warning.
+send2trash>=1.8.2

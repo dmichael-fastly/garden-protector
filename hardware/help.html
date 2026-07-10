@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Help</title>
+  <!-- Fastly favicon — served at /favicon.ico (backed by repo-root favicon.ico) -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    /* Help is a reading page: a single centered column built from gp.css tokens.
+       Header/brand/nav/.gp-pill markup is spliced in at the header sentinel below.
+       Layout/spacing utilities come from Tailwind in the markup; this block keeps only
+       the page's bespoke components (mode rows, numbered steps, tile glossary). */
+    main { max-width: var(--page-narrow); margin: 0 auto; padding: 36px 24px 72px; }
+    .help-hero h1 { font-size: 28px; line-height: 1.15; margin: 0 0 8px; font-weight: 700; letter-spacing: -0.4px; }
+    .help-intro { color: var(--muted); font-size: 15.5px; line-height: 1.6; margin: 0; }
+    /* Section header inside each .card — icon chip + uppercase label. */
+    .help-sec h2 {
+      font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px;
+      color: var(--text); margin: 0 0 14px; font-weight: 700;
+      display: flex; align-items: center; gap: 11px;
+    }
+    .help-sec h2 .sec-ic {
+      width: 30px; height: 30px; border-radius: var(--radius-sm); flex: 0 0 auto;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--brand);
+      background: color-mix(in srgb, var(--brand) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+    }
+    .help-sec h2 .sec-ic .gp-ic { width: 17px; height: 17px; }
+    .help-sec p { margin: 10px 0; font-size: 15px; line-height: 1.65; }
+    .help-sec p.muted { color: var(--muted); }
+    /* Mode explainer rows — icon + name + plain-language meaning. */
+    .modes { display: grid; gap: 10px; margin: 14px 0 4px; }
+    .mode-row { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start;
+      padding: 14px 16px; background: var(--panel-2);
+      border: 1px solid color-mix(in srgb, var(--hairline) 80%, transparent);
+      border-radius: var(--radius-md); transition: border-color .12s ease, box-shadow .12s ease; }
+    .mode-row:hover { border-color: var(--hairline); box-shadow: var(--shadow-1); }
+    .mode-row .ic { width: 38px; height: 38px; border-radius: var(--radius-sm); display: inline-flex;
+      align-items: center; justify-content: center; flex: 0 0 auto; }
+    .mode-row .ic .gp-ic { width: 20px; height: 20px; }
+    .mode-row .ic.off { color: var(--muted); background: var(--panel); border: 1px solid var(--hairline); }
+    .mode-row .ic.monitor { color: var(--amber-ink); background: var(--amber-dim); }
+    .mode-row .ic.active { color: var(--green-ink); background: var(--green-dim); }
+    .mode-row .ic.spray { color: var(--brand-ink); background: var(--brand); }
+    .mode-row .name { font-weight: 700; font-size: 15px; }
+    .mode-row .desc { color: var(--muted); font-size: 14px; line-height: 1.55; margin-top: 3px; }
+    /* "What you'll need" + steps */
+    .help-list { margin: 10px 0; padding-left: 20px; font-size: 15px; line-height: 1.7; }
+    .help-list li { margin: 3px 0; }
+    .help-list li::marker { color: var(--brand); }
+    .steps { counter-reset: step; list-style: none; margin: 14px 0 4px; padding: 0; }
+    .steps li { position: relative; padding: 4px 0 18px 46px; font-size: 15px; line-height: 1.6; }
+    .steps li:last-child { padding-bottom: 4px; }
+    /* connector line linking the numbered step bullets */
+    .steps li:not(:last-child)::after { content: ""; position: absolute; left: 14px; top: 32px;
+      bottom: 4px; width: 2px; background: color-mix(in srgb, var(--brand) 28%, var(--hairline)); }
+    .steps li::before { counter-increment: step; content: counter(step);
+      position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
+      background: var(--brand); color: var(--brand-ink); font-weight: 700; font-size: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      box-shadow: var(--shadow-1); z-index: 1; }
+    .steps li b { color: var(--text); }
+    /* Tiles glossary */
+    .tiles { display: grid; grid-template-columns: 34px 1fr; gap: 12px 14px; margin-top: 8px;
+      font-size: 14.5px; line-height: 1.55; align-items: start; }
+    .tiles .gi { width: 32px; height: 32px; border-radius: var(--radius-sm); color: var(--brand);
+      display: inline-flex; align-items: center; justify-content: center;
+      background: color-mix(in srgb, var(--brand) 12%, transparent); }
+    .tiles .gi .gp-ic { width: 18px; height: 18px; }
+    .tiles b { color: var(--text); } .tiles span { color: var(--muted); }
+    @media (max-width: 600px) { main { padding: 22px 14px 52px; } .help-hero h1 { font-size: 24px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + all controls (status, Pi health, tz, theme) come from the shared header partial -->
+  </header>
+
+  <main>
+    <div class="help-hero">
+      <h1>Help &amp; setup</h1>
+      <p class="help-intro">Everything you need to get your garden watched over — how protection
+        works, how to set up the Garden Node, and what the dashboard is telling you.</p>
+    </div>
+
+    <div class="flex flex-col gap-4 mt-6">
+
+    <!-- 1. How protection works -->
+    <section class="card full help-sec">
+      <h2><span class="sec-ic"><svg class="gp-ic" aria-hidden="true"><use href="#gp-shield"/></svg></span> How protection works</h2>
+      <p>Garden Protector keeps an eye on your garden and, when an unwanted visitor turns up,
+        gives them a harmless squirt of water to send them on their way. You're always in
+        charge with three simple modes:</p>
+      <div class="modes">
+        <div class="mode-row">
+          <span class="ic off"><svg class="gp-ic" aria-hidden="true"><use href="#gp-power"/></svg></span>
+          <div><div class="name">Off</div>
+            <div class="desc">Taking a break — nothing is watched and nothing will spray. Handy
+              while you're out pottering in the garden yourself.</div></div>
+        </div>
+        <div class="mode-row">
+          <span class="ic monitor"><svg class="gp-ic" aria-hidden="true"><use href="#gp-eye"/></svg></span>
+          <div><div class="name">Monitor</div>
+            <div class="desc">Watches and keeps a photo diary of who visits, but never sprays.
+              A gentle "log only" mode for when you just want to see what's about.</div></div>
+        </div>
+        <div class="mode-row">
+          <span class="ic active"><svg class="gp-ic" aria-hidden="true"><use href="#gp-shield"/></svg></span>
+          <div><div class="name">Active</div>
+            <div class="desc">The full deal — watches the garden and gives a confirmed critter a
+              quick squirt to shoo it off.</div></div>
+        </div>
+        <div class="mode-row">
+          <span class="ic spray"><svg class="gp-ic" aria-hidden="true"><use href="#gp-spray"/></svg></span>
+          <div><div class="name">Spraying &amp; the Stop button</div>
+            <div class="desc">When a squirt is happening, the dashboard shows <b>Spraying</b> and a
+              <b>Stop this spray</b> button appears. Tapped it by mistake, or it's just next door's
+              cat you don't mind? Stop the squirt — protection stays on and is ready for the next
+              visitor. (When it's raining, sprays pause on their own and resume once it's dry.)</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Set up your Garden Node -->
+    <section class="card full help-sec">
+      <h2><span class="sec-ic"><svg class="gp-ic" aria-hidden="true"><use href="#gp-leaf"/></svg></span> Set up your Garden Node</h2>
+      <p>The <b>Garden Node</b> is the little weatherproof box that lives out in the garden and does
+        the watching. Inside it's a tiny low-power brain (an ESP32-C3) wired to a motion radar that
+        spots visitors, a relay that switches the water-spray on and off, and its own battery (topped
+        up by a small solar panel) so it runs all day without a cable to the house. Fit a weather
+        sensor too and it'll add temperature, humidity and rain to your dashboard.</p>
+      <p class="muted"><b>What you'll need:</b></p>
+      <ul class="help-list">
+        <li>The Garden Node box (brain + motion radar)</li>
+        <li>Your spray gadget — a small pump and nozzle, plumbed to a water jug</li>
+        <li>Power for the garden: a 12&nbsp;V battery and a small solar panel</li>
+        <li>A computer with a USB-C cable for the one-time setup</li>
+        <li>Optional weather extras: a temperature/humidity sensor and a rain gauge</li>
+      </ul>
+      <p class="muted"><b>Getting it going:</b></p>
+      <ol class="steps">
+        <li><b>Load the software.</b> Plug the node into your computer with the USB-C cable and pop
+          the Garden Protector software onto it — a one-time step that teaches the box its job.</li>
+        <li><b>Power it up.</b> Connect the battery (and solar panel) and place the box out in the
+          garden where it can see the beds you want to protect, with the spray pointed the right way.</li>
+        <li><b>Pair it with your garden.</b> Switch protection to <b>Active</b> from the dashboard.
+          Within a minute the box says hello and the <b>Garden Node</b> tile turns <b>online</b> —
+          you're protected. If it stays offline, double-check it has power and is within Wi-Fi range
+          of the house.</li>
+      </ol>
+      <div class="alert alert-success alert-soft mt-3" role="note">
+        <svg class="gp-ic good" aria-hidden="true"><use href="#gp-check"/></svg>
+        <span><b>Good to know:</b> if the node ever loses power or drops off, the spray simply stays
+          switched off — it always fails safe, so a flat battery never means a soggy garden.</span>
+      </div>
+    </section>
+
+    <!-- 3. What the dashboard tiles mean -->
+    <section class="card full help-sec">
+      <h2><span class="sec-ic"><svg class="gp-ic" aria-hidden="true"><use href="#gp-info"/></svg></span> What the dashboard tiles mean</h2>
+      <p>The dashboard's health tiles show what your Garden Node is reporting. Until a node has paired,
+        you'll see <b>NOT SET UP</b> (or <b>OFFLINE</b> if it's gone quiet) — tap that tile any time to
+        jump back to this guide.</p>
+      <div class="tiles">
+        <span class="gi"><svg class="gp-ic" aria-hidden="true"><use href="#gp-leaf"/></svg></span>
+        <div><b>Garden Node</b> <span>— is the garden box awake and talking to the house? Online means
+          you're protected; offline or "not set up" means it isn't reporting yet.</span></div>
+        <span class="gi"><svg class="gp-ic" aria-hidden="true"><use href="#gp-bolt"/></svg></span>
+        <div><b>Battery</b> <span>— how much charge the garden box has left. The solar panel tops it
+          back up during the day.</span></div>
+        <span class="gi"><svg class="gp-ic" aria-hidden="true"><use href="#gp-thermo"/></svg></span>
+        <div><b>Temperature</b> <span>— how warm it is out in the garden right now (needs the optional
+          weather sensor).</span></div>
+        <span class="gi"><svg class="gp-ic" aria-hidden="true"><use href="#gp-cloud"/></svg></span>
+        <div><b>Humidity</b> <span>— how damp the air is (also from the weather sensor).</span></div>
+        <span class="gi"><svg class="gp-ic" aria-hidden="true"><use href="#gp-rain"/></svg></span>
+        <div><b>Rain</b> <span>— whether it's raining. When it is, sprays pause automatically — critters
+          shelter in the rain, so there's nothing to shoo — and pick back up once it's dry.</span></div>
+      </div>
+      <p class="muted">A dash (&mdash;) on a tile just means that reading hasn't come in yet, usually
+        because the matching sensor isn't fitted.</p>
+    </section>
+
+    </div>
+  </main>
+
+  <script>
+    // Mark the Help tab active (the nav is rendered server-side; this is a belt-and-braces
+    // highlight in case the page is served without an active_id).
+    GP.markNav("nav-help");
+  </script>
+</body>
+</html>

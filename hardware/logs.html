@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Garden Activity</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    /* body type + base reset, tokens, and DaisyUI components (.btn/.input/.select/.table/
+       .badge/.toggle) come from app.css + gp.css. Only the page-bespoke layout + the
+       log-line color tags live here. Header chrome is injected from the shared partial. */
+    main { max-width: var(--page-wide); margin: 0 auto; padding: 28px 18px 80px; }
+    .page-title { font-size: 24px; font-weight: var(--weight-display); margin: 0 0 4px; letter-spacing: -0.3px; }
+    .page-sub { color: var(--muted); font-size: 14.5px; margin: 0 0 22px; }
+
+    /* Filter bar: a card surface holding the DaisyUI controls. */
+    .filter-bar {
+      background: var(--panel);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: flex-end;
+      box-shadow: var(--shadow-1);
+    }
+    .filter-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .filter-item label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+    }
+
+    /* Live tail toggle: a bespoke pill wrapping a DaisyUI .toggle + a pulsing dot. */
+    .live-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--panel-2);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      padding: 0 14px;
+      cursor: pointer;
+      height: 38px;
+      font-weight: 600;
+      font-size: 14px;
+      user-select: none;
+      transition: border-color .12s ease, background .12s ease;
+    }
+    .live-toggle:hover { border-color: color-mix(in srgb, var(--green) 45%, var(--hairline)); }
+    .live-toggle.active {
+      border-color: var(--green);
+      background: color-mix(in srgb, var(--green) 12%, var(--panel-2));
+    }
+    .live-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex: 0 0 auto;
+    }
+    .live-toggle.active .live-indicator {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    /* Table pane wrapper — DaisyUI .table lives inside; we just frame + scroll it. */
+    .table-container {
+      background: var(--panel);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      overflow-x: auto;
+      box-shadow: var(--shadow-1);
+    }
+    /* DaisyUI .table owns the cell rhythm; keep the diary dense + readable. */
+    #logs-table { font-size: 13px; }
+
+    /* Monospace formatting for stamps / trace ids / op names / args. */
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+    }
+    .timestamp {
+      white-space: nowrap;
+      color: var(--muted);
+    }
+    .cid-link {
+      color: var(--brand-link);
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .cid-link:hover {
+      text-decoration: underline;
+    }
+
+    /* log-tag: the per-component colored chip in the diary table (bespoke name so it does
+       NOT collide with DaisyUI .badge or the gp.css .badge metric tile). Built in page JS
+       as `class="log-tag <component>"`. */
+    .log-tag {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+    .log-tag.camera { background: var(--blue-dim); color: var(--blue-ink); border-color: color-mix(in srgb, var(--blue) 35%, transparent); }
+    .log-tag.deterrent { background: var(--red-dim); color: var(--red-ink); border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+    .log-tag.http { background: var(--green-dim); color: var(--green-ink); border-color: color-mix(in srgb, var(--green) 35%, transparent); }
+    .log-tag.fsm { background: var(--amber-dim); color: var(--amber-ink); border-color: color-mix(in srgb, var(--amber) 35%, transparent); }
+    .log-tag.trigger { background: var(--panel-3); color: var(--text); border-color: var(--hairline); }
+    .log-tag.system { background: var(--panel-2); color: var(--muted); border-color: var(--hairline); }
+
+    .status-pill {
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.3px;
+    }
+    .status-pill.ok { color: var(--green-ink); }
+    .status-pill.error { color: var(--red-ink); }
+
+    .duration {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+    }
+    .detail {
+      word-break: break-all;
+      white-space: pre-wrap;
+      max-width: 450px;
+    }
+    .detail-args {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+      background: var(--panel-2);
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      max-height: 120px;
+      overflow-y: auto;
+      border: 1px solid var(--hairline);
+    }
+
+    /* Pagination */
+    .pagination {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .pag-info {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .pag-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Loading state overlay */
+    .logs-loader {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 60px 0;
+      gap: 12px;
+      color: var(--muted);
+    }
+    .spin { width: 20px; height: 20px; border: 3px solid var(--hairline); border-top-color: var(--brand);
+      border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .no-logs {
+      text-align: center;
+      color: var(--muted);
+      padding: 60px 20px;
+    }
+
+    /* Pi CPU/RAM (#pi-health) styling now lives in gp.css — single source of truth. */
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + all controls (status, Pi health, tz, theme) come from the shared header partial -->
+  </header>
+  <main>
+    <h1 class="page-title">Garden Activity</h1>
+    <p class="page-sub">A running diary of everything your garden has been up to — sightings, sprays, weather, and check-ins.</p>
+
+    <!-- Filter Controls -->
+    <div class="filter-bar">
+      <div class="filter-item">
+        <label for="filter-component">Part of garden</label>
+        <select id="filter-component" class="select select-sm">
+          <option value="">Everything</option>
+          <option value="camera">Cameras</option>
+          <option value="deterrent">Sprayers &amp; deterrents</option>
+          <option value="http">Connection</option>
+          <option value="fsm">Protection status</option>
+          <option value="trigger">Movement &amp; triggers</option>
+          <option value="system">Behind the scenes</option>
+        </select>
+      </div>
+
+      <div class="filter-item">
+        <label for="filter-outcome">How it went</label>
+        <select id="filter-outcome" class="select select-sm">
+          <option value="">Anything</option>
+          <option value="ok">Worked</option>
+          <option value="error">Hiccups</option>
+        </select>
+      </div>
+
+      <div class="filter-item" style="flex: 1; min-width: 240px;">
+        <label for="filter-query">Search</label>
+        <input type="text" id="filter-query" class="input input-sm w-full" placeholder="Search the diary — a camera name, what happened…" />
+      </div>
+
+      <div class="filter-item">
+        <label for="filter-limit">Limit</label>
+        <select id="filter-limit" class="select select-sm" style="min-width: 110px;">
+          <option value="50">50 rows</option>
+          <option value="100" selected>100 rows</option>
+          <option value="250">250 rows</option>
+          <option value="500">500 rows</option>
+        </select>
+      </div>
+
+      <button id="btn-reset" class="btn btn-ghost btn-sm" title="Reset Filters" style="display: none;">Reset</button>
+
+      <div class="live-toggle" id="btn-live">
+        <input type="checkbox" id="chk-live" class="toggle toggle-success toggle-sm" style="pointer-events: none;" />
+        <span class="live-indicator"></span>
+        <span>Watch live</span>
+      </div>
+
+      <button id="btn-clear" class="btn btn-error btn-soft btn-sm" style="margin-left: auto;">
+        <svg class="gp-ic" aria-hidden="true"><use href="#gp-trash"/></svg>Clear the diary
+      </button>
+    </div>
+
+    <!-- Logs Table Container -->
+    <div class="table-container">
+      <div id="logs-loading" class="logs-loader">
+        <span class="spin"></span>
+        <span>Flipping through the diary…</span>
+      </div>
+      <div id="logs-empty" class="no-logs" style="display: none;">
+        Nothing here yet for those filters. As your garden does things, they'll show up here.
+      </div>
+      <table class="table table-zebra table-sm" id="logs-table" style="display: none;">
+        <thead>
+          <tr>
+            <th style="width: 160px;">When</th>
+            <th style="width: 140px;">Trace</th>
+            <th style="width: 110px;">Part of garden</th>
+            <th style="width: 150px;">What happened</th>
+            <th style="width: 80px;">Result</th>
+            <th style="width: 70px; text-align: right;">Took</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="logs-tbody">
+          <!-- Rows injected here -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <div class="pag-info" id="pag-info">
+        Showing -- of -- entries
+      </div>
+      <div class="pag-buttons">
+        <button class="btn btn-sm" id="btn-prev" disabled>Previous</button>
+        <button class="btn btn-sm" id="btn-next" disabled>Next</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Clear diary confirm modal (themed; no type-to-confirm — logs are recoverable) -->
+  <div id="clear-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="clear-modal-title">
+    <div class="modal-card">
+      <h3 id="clear-modal-title" style="margin:0 0 10px;font-size:18px;">Clear the activity diary?</h3>
+      <p style="color:var(--muted);font-size:14px;margin:0 0 20px;">This empties the list of things your garden has done — sightings, sprays, and check-ins. Your photos and settings aren't touched.</p>
+      <div style="display:flex;justify-content:flex-end;gap:10px;">
+        <button id="clear-cancel" class="btn btn-ghost" type="button">Keep diary</button>
+        <button id="clear-confirm" class="btn btn-error" type="button">Clear diary</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    // Friendly display labels for component badges (values stay unchanged for CSS colouring).
+    const COMPONENT_LABEL = {
+      camera: "Cameras", deterrent: "Sprayer", http: "Connection",
+      fsm: "Protection", trigger: "Movement", system: "Behind the scenes"
+    };
+
+    function showToast(msg, isError) {
+      const t = $("toast");
+      t.textContent = msg;
+      t.className = "toast show" + (isError ? " error" : "");
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => { t.className = "toast"; }, 3000);
+    }
+
+    let currentPage = 1;
+    let limit = 100;
+    let totalLogs = 0;
+    let liveIntervalId = null;
+
+    // Load initial logs
+    document.addEventListener("DOMContentLoaded", () => {
+      loadLogs();
+      setupEventListeners();
+      // Re-render log rows when the viewer switches the display timezone (header picker).
+      document.addEventListener("gp:tzchange", () => loadLogs(true));
+    });
+
+    function setupEventListeners() {
+      // Inputs
+      $("filter-component").addEventListener("change", () => { currentPage = 1; loadLogs(); checkResetBtn(); });
+      $("filter-outcome").addEventListener("change", () => { currentPage = 1; loadLogs(); checkResetBtn(); });
+      $("filter-limit").addEventListener("change", (e) => {
+        limit = parseInt(e.target.value);
+        currentPage = 1;
+        loadLogs();
+      });
+
+      // Search (debounced)
+      let searchTimeout;
+      $("filter-query").addEventListener("input", () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          currentPage = 1;
+          loadLogs();
+          checkResetBtn();
+        }, 300);
+      });
+
+      // Reset
+      $("btn-reset").addEventListener("click", () => {
+        $("filter-component").value = "";
+        $("filter-outcome").value = "";
+        $("filter-query").value = "";
+        currentPage = 1;
+        loadLogs();
+        checkResetBtn();
+      });
+
+      // Live Tail
+      $("btn-live").addEventListener("click", () => {
+        const chk = $("chk-live");
+        chk.checked = !chk.checked;
+        if (chk.checked) {
+          $("btn-live").classList.add("active");
+          // Deactivate pagination while in live tail mode
+          $("btn-prev").disabled = true;
+          $("btn-next").disabled = true;
+          // Set query to page 1 and run polling
+          currentPage = 1;
+          loadLogs();
+          liveIntervalId = setInterval(() => {
+            loadLogs(true); // silent load (no full table reload flashing)
+          }, 2000);
+        } else {
+          $("btn-live").classList.remove("active");
+          clearInterval(liveIntervalId);
+          liveIntervalId = null;
+          loadLogs(); // full fresh reload to restore normal state
+        }
+      });
+
+      // Clear Logs — opens the themed confirm modal (no native confirm/alert)
+      $("btn-clear").addEventListener("click", () => {
+        $("clear-modal").classList.add("show");
+        $("clear-cancel").focus();
+      });
+      $("clear-cancel").addEventListener("click", () => $("clear-modal").classList.remove("show"));
+      $("clear-modal").addEventListener("click", (e) => { if (e.target === $("clear-modal")) $("clear-modal").classList.remove("show"); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("clear-modal").classList.contains("show")) $("clear-modal").classList.remove("show"); });
+      $("clear-confirm").addEventListener("click", () => {
+        $("clear-modal").classList.remove("show");
+        fetch("/api/logs/clear", { method: "POST" })
+          .then(res => res.json())
+          .then(data => {
+            if (data.ok) {
+              showToast(`Diary cleared — ${data.count} ${data.count === 1 ? "entry" : "entries"} tidied away.`);
+              currentPage = 1;
+              loadLogs();
+            } else {
+              showToast("Couldn't clear the diary just now — please try again.", true);
+            }
+          })
+          .catch(err => {
+            showToast("Couldn't reach your garden — check the connection and try again.", true);
+          });
+      });
+
+      // Pagination
+      $("btn-prev").addEventListener("click", () => {
+        if (currentPage > 1) {
+          currentPage--;
+          loadLogs();
+        }
+      });
+      $("btn-next").addEventListener("click", () => {
+        const maxPage = Math.ceil(totalLogs / limit);
+        if (currentPage < maxPage) {
+          currentPage++;
+          loadLogs();
+        }
+      });
+    }
+
+    function checkResetBtn() {
+      const hasFilter = $("filter-component").value || $("filter-outcome").value || $("filter-query").value;
+      $("btn-reset").style.display = hasFilter ? "inline-flex" : "none";
+    }
+
+    function setTraceFilter(cid) {
+      if (!cid || cid === "-") return;
+      // Stop live tail if active to avoid overriding the user-driven search
+      const chk = $("chk-live");
+      if (chk.checked) {
+        chk.checked = false;
+        $("btn-live").classList.remove("active");
+        clearInterval(liveIntervalId);
+        liveIntervalId = null;
+      }
+      $("filter-component").value = "";
+      $("filter-outcome").value = "";
+      $("filter-query").value = cid;
+      currentPage = 1;
+      loadLogs();
+      checkResetBtn();
+    }
+
+    function formatTimestamp(ts) {
+      return GP.fmtStamp(ts * 1000, { millis: true });   // tz-aware "YYYY-MM-DD HH:mm:ss.SSS" (header picker)
+    }
+
+    function loadLogs(silent = false) {
+      if (!silent) {
+        $("logs-loading").style.display = "flex";
+        $("logs-table").style.display = "none";
+        $("logs-empty").style.display = "none";
+      }
+
+      const component = $("filter-component").value;
+      const outcome = $("filter-outcome").value;
+      const query = $("filter-query").value;
+      const offset = (currentPage - 1) * limit;
+
+      const url = `/api/logs?limit=${limit}&offset=${offset}&component=${component}&outcome=${outcome}&query=${encodeURIComponent(query)}`;
+
+      fetch(url)
+        .then(res => {
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          return res.json();
+        })
+        .then(data => {
+          totalLogs = data.total;
+          const events = data.events || [];
+
+          $("logs-loading").style.display = "none";
+
+          if (events.length === 0) {
+            if (!silent) {
+              $("logs-table").style.display = "none";
+              $("logs-empty").style.display = "block";
+            } else {
+              $("logs-tbody").innerHTML = "";
+              $("logs-table").style.display = "none";
+              $("logs-empty").style.display = "block";
+            }
+            updatePaginationInfo(0);
+            return;
+          }
+
+          renderTable(events);
+          updatePaginationInfo(events.length);
+        })
+        .catch(err => {
+          console.error("Error loading logs:", err);
+          $("logs-loading").style.display = "none";
+          if (!silent) {
+            $("logs-empty").textContent = "Couldn't open the diary just now — give it a moment and try again.";
+            $("logs-empty").style.display = "block";
+          }
+        });
+    }
+
+    function renderTable(events) {
+      const tbody = $("logs-tbody");
+      let html = "";
+
+      events.forEach(ev => {
+        const tsStr = formatTimestamp(ev.ts);
+        const durStr = ev.dur_ms !== null && ev.dur_ms !== undefined ? `${ev.dur_ms.toFixed(1)} ms` : "-";
+        const cidText = ev.cid || "-";
+        const cidLink = ev.cid ? `<a class="cid-link mono" onclick="setTraceFilter('${ev.cid}')">${ev.cid.substring(0, 12)}&hellip;</a>` : "<span class='mono'>-</span>";
+        
+        let argsHtml = "";
+        if (ev.args) {
+          argsHtml = `<div class="detail-args mono">${JSON.stringify(ev.args, null, 2)}</div>`;
+        }
+
+        html += `
+          <tr>
+            <td class="mono timestamp" title="Unix epoch: ${ev.ts}">${tsStr}</td>
+            <td>${cidLink}</td>
+            <td><span class="log-tag ${ev.component}">${COMPONENT_LABEL[ev.component] || ev.component}</span></td>
+            <td class="mono" style="font-weight: 600;">${ev.op}</td>
+            <td><span class="status-pill ${ev.outcome}">${ev.outcome}</span></td>
+            <td class="mono duration">${durStr}</td>
+            <td>
+              <div class="detail">${escapeHtml(ev.detail || "")}</div>
+              ${argsHtml}
+            </td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = html;
+      $("logs-table").style.display = "table";
+      $("logs-empty").style.display = "none";
+    }
+
+    function updatePaginationInfo(visibleCount) {
+      const offset = (currentPage - 1) * limit;
+      const start = totalLogs > 0 ? offset + 1 : 0;
+      const end = offset + visibleCount;
+
+      $("pag-info").textContent = `Showing ${start} – ${end} of ${totalLogs} entries`;
+
+      const maxPage = Math.ceil(totalLogs / limit);
+      const isLive = $("chk-live").checked;
+
+      $("btn-prev").disabled = isLive || currentPage <= 1;
+      $("btn-next").disabled = isLive || currentPage >= maxPage || maxPage === 0;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // CPU/RAM (#pi-health) is auto-wired by gp.js initPiHealth() — no per-page JS.
+  </script>
+</body>
+</html>

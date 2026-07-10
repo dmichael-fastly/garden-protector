@@ -1,0 +1,19 @@
+{
+  "_comment": "Shape of configs/{service_id}.json, written by `gp-provision provision`. The REAL file is gitignored (it holds live FOS keys, cdn_secret, the Fastly admin token, and store ids). Never commit a populated copy.",
+  "service_id": "YOUR_COMPUTE_SERVICE_ID",
+  "service_name": "garden-protector",
+  "backend_url": "https://garden-protector.edgecompute.app",
+  "fastly_api_key": "YOUR_FASTLY_API_TOKEN",
+  "garden_state_store_id": "KV_STORE_ID",
+  "garden_models_store_id": "KV_STORE_ID",
+  "garden_tokens_store_id": "SECRET_STORE_ID",
+  "active_version": 3,
+  "fos_region": "us-east-1",
+  "fos_bucket": "gp-garden-protector-images",
+  "fos_endpoint": "us-east-1.object.fastlystorage.app",
+  "fos_access_key_id": "BUCKET_SCOPED_FOS_ACCESS_KEY",
+  "fos_secret_access_key": "BUCKET_SCOPED_FOS_SECRET_KEY",
+  "cdn_service_id": "CDN_VCL_SERVICE_ID",
+  "cdn_url": "https://garden-protector-cdn.global.ssl.fastly.net",
+  "cdn_secret": "CDN_SHARED_READ_SECRET"
+}

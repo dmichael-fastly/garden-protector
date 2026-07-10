@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Settings</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    /* box-sizing, body type + base reset, .card, .toast all come from gp.css (shared
+       primitives). Header chrome (brand, garden name, nav, status pill, Pi CPU/RAM, tz +
+       theme) comes from the shared partial + gp.css — single source of truth. Buttons,
+       inputs, selects + textareas are DaisyUI (app.css) — styled via classes in markup. */
+    main { max-width: var(--page-narrow); margin: 0 auto; padding: 28px 18px 80px; }
+    .page-title { font-size: 26px; font-weight: var(--weight-display); letter-spacing: -0.4px; margin: 0 0 6px; }
+    .page-sub { color: var(--muted); font-size: 14.5px; margin: 0 0 26px; }
+    /* gp.css owns .card (panel surface + radius + shadow). Settings cards get a touch more
+       breathing room + a section heading that pairs an icon with a real title. */
+    .card { padding: 22px 24px; margin-bottom: 20px; }
+    .card h2 { font-size: 17px; margin: 0 0 4px; display: flex; align-items: center; gap: 10px;
+      text-transform: none; letter-spacing: normal; color: var(--text); font-weight: 650; }
+    .card h2 .gi { display: inline-flex; }
+    .card h2 .gi .gp-ic { width: 20px; height: 20px; }
+    .card .desc { color: var(--muted); font-size: 14px; margin: 0 0 18px; line-height: 1.55; }
+    /* Field label: a compact, uppercase eyebrow above each control. */
+    label { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .4px; margin: 16px 0 6px; font-weight: 600; }
+    /* show/hide password — eyeball toggle injected by initPasswordToggles(). The wrap sits
+       around a DaisyUI .input; the toggle is a bespoke overlay button. */
+    .pw-wrap { position: relative; display: block; }
+    .pw-wrap > input { padding-right: 44px; }
+    .pw-toggle { position: absolute; top: 0; right: 0; height: 100%; width: 42px; display: flex;
+      align-items: center; justify-content: center; padding: 0; background: transparent; border: 0;
+      color: var(--muted); cursor: pointer; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+    .pw-toggle:hover { color: var(--text); }
+    .pw-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+    .pw-toggle svg { width: 18px; height: 18px; display: block; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+    .btns { display: flex; gap: 10px; margin-top: 20px; align-items: center; flex-wrap: wrap; }
+    /* status message line next to a save button. */
+    .msg { font-size: 13.5px; min-height: 18px; }
+    .msg.ok { color: var(--green-ink); } .msg.err { color: var(--red-ink); } .msg.muted { color: var(--muted); }
+    .hint { color: var(--muted); font-size: 12.5px; margin-top: 8px; line-height: 1.5; }
+    /* read-only deployment key/value grid. */
+    .kv { display: grid; grid-template-columns: 150px 1fr; gap: 8px 16px; font-size: 14px; margin-top: 6px; }
+    .kv .k { color: var(--muted); } .kv .v { color: var(--text); word-break: break-word; }
+    .sep { height: 1px; background: var(--hairline); margin: 22px 0; border: 0; }
+    /* token preview chip (when a token is already configured). */
+    .tok-preview { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: var(--panel-2); border: 1px solid var(--hairline); padding: 10px 14px;
+      border-radius: var(--radius-sm); margin-bottom: 8px; }
+    .tok-preview .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; color: var(--text); }
+    /* streamed deploy/teardown log — a terminal-like surface. */
+    .log { display: none; background: var(--code-bg); color: var(--text); border: 1px solid var(--hairline);
+      border-radius: var(--radius-sm);
+      padding: 11px 13px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55;
+      max-height: 240px; overflow: auto; margin-top: 14px; white-space: pre-wrap; }
+    .log.show { display: block; }
+    .log .l-cmd { color: var(--blue-ink); } .log .l-warn { color: var(--amber-ink); }
+    .log .l-error { color: var(--red-ink); } .log .l-ok { color: var(--green-ink); }
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + all controls (status, Pi health, tz, theme) come from the shared header partial -->
+  </header>
+  <main>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub">Manage your garden's details, security, and gadgets — all in one place.</p>
+
+    <!-- Garden details -->
+    <section class="card">
+      <h2><span class="gi"><svg class="gp-ic brand"><use href="#gp-leaf"/></svg></span> Garden details</h2>
+      <p class="desc">What we call your garden and where it's growing. Changes here are saved on the
+        Pi and pushed to the cloud.</p>
+      <div id="garden-form"><p class="msg muted">Loading…</p></div>
+      <div class="log" id="garden-log"></div>
+    </section>
+
+    <!-- Security -->
+    <section class="card">
+      <h2><span class="gi"><svg class="gp-ic"><use href="#gp-lock"/></svg></span> Security</h2>
+      <p class="desc">Your sign-in passcode and the Fastly token your garden uses to reach the cloud.</p>
+
+      <label>Current passcode</label>
+      <input id="pc-cur" class="input w-full" type="password" autocomplete="current-password" placeholder="current passcode">
+      <div class="grid2">
+        <div><label>New passcode (min 6)</label><input id="pc-new" class="input w-full" type="password" autocomplete="new-password" placeholder="new passcode"></div>
+        <div><label>Confirm new passcode</label><input id="pc-new2" class="input w-full" type="password" autocomplete="new-password" placeholder="repeat it"></div>
+      </div>
+      <div class="btns"><button class="btn btn-primary" id="pc-save">Change passcode</button>
+        <span class="msg" id="pc-msg"></span></div>
+
+      <hr class="sep">
+
+      <label>Fastly API token</label>
+
+      <!-- Preview block when token is already configured -->
+      <div id="tok-preview-wrap" class="tok-preview" style="display: none;">
+        <span class="mono">••••••••<span id="tok-preview-chars"></span></span>
+        <button class="btn btn-ghost btn-sm" id="tok-btn-edit" type="button">Edit</button>
+      </div>
+
+      <!-- Input block when editing or configuring -->
+      <div id="tok-input-wrap">
+        <input id="tok" class="input w-full" type="password" autocomplete="off" placeholder="paste a new token to replace the stored one">
+        <div class="hint">Stored privately on your garden hub only and never shown again. Create one at
+          manage.fastly.com → Account → API tokens.</div>
+        <div class="btns">
+          <button class="btn btn-primary" id="tok-save">Update token</button>
+          <button class="btn btn-ghost" id="tok-btn-cancel" style="display: none;" type="button">Cancel</button>
+          <span class="msg" id="tok-msg"></span>
+        </div>
+      </div>
+
+      <hr class="sep">
+
+      <label>Viewer password (optional)</label>
+      <p class="msg muted" id="vp-status" style="margin:0 0 8px">Loading…</p>
+      <input id="vp-new" class="input w-full" type="password" autocomplete="off" placeholder="set a password to keep your garden private">
+      <div class="btns">
+        <button class="btn btn-primary" id="vp-save">Require a password</button>
+        <button class="btn btn-ghost" id="vp-clear" style="display:none">Make it public</button>
+        <span class="msg" id="vp-msg"></span>
+      </div>
+      <div class="hint">Anyone who opens your garden's web page can watch the live view. Set a password
+        and they'll have to type it first — it's separate from your own sign-in. Changes take a few
+        seconds to kick in.</div>
+    </section>
+
+    <!-- Gadgets -->
+    <section class="card">
+      <h2><span class="gi"><svg class="gp-ic"><use href="#gp-gear"/></svg></span> Gadgets</h2>
+      <p class="desc">Add, name, or review the cameras, sensors and deterrents in your garden.</p>
+      <div class="btns"><a class="btn btn-soft" href="/devices">Manage gadgets →</a></div>
+    </section>
+
+    <!-- Read-only deployment info -->
+    <section class="card">
+      <h2><span class="gi"><svg class="gp-ic"><use href="#gp-cloud"/></svg></span> Deployment</h2>
+      <p class="desc">Where your garden lives in the cloud (read-only).</p>
+      <div class="kv" id="deploy-kv"><span class="k">Loading…</span><span class="v"></span></div>
+    </section>
+
+    <!-- Danger zone -->
+    <section class="card danger">
+      <h2><span class="gi"><svg class="gp-ic warn"><use href="#gp-warn"/></svg></span> Danger zone</h2>
+      <p class="desc">Tear down removes your garden from the cloud entirely — the Fastly service, its
+        stored data and images — and returns this Pi to first-time setup. <b>This can't be undone.</b></p>
+      <label>Type your garden id to confirm</label>
+      <input id="td-confirm" class="input w-full" placeholder="garden id">
+      <div class="btns"><button class="btn btn-error" id="td-go" disabled>Tear down my garden</button>
+        <span class="msg" id="td-msg"></span></div>
+      <div class="log" id="td-log"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const state = { garden: {}, fastly: {}, node_id: "", garden_id: "", has_viewer_pass: false };
+
+    function showToast(msg, isError) {
+      const t = $("toast"); t.textContent = msg;
+      t.className = "toast show" + (isError ? " error" : "");
+      clearTimeout(showToast._t); showToast._t = setTimeout(() => { t.className = "toast"; }, 2600);
+    }
+    function logLine(el, line, level) {
+      const d = document.createElement("div"); d.className = "l-" + (level || "info");
+      d.innerHTML = GP.logIcon(level) + " ";
+      d.appendChild(document.createTextNode(line));
+      el.appendChild(d); el.scrollTop = el.scrollHeight;
+    }
+
+    // JSON in/out; on 401 hand off to the login page (session lost).
+    async function api(method, path, body) {
+      const opt = { method, headers: {} };
+      if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+      const r = await fetch(path, opt);
+      if (r.status === 401) { window.location.href = "/login"; await new Promise(() => {}); }
+      const text = await r.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch (e) {}
+      if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+      return data;
+    }
+
+    // POST + consume the SSE stream (EventSource is GET-only). Returns the done frame.
+    async function streamPost(url, body, logEl) {
+      let res = { ok: false };
+      logEl.classList.add("show"); logEl.innerHTML = "";
+      try {
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (r.status === 401) { window.location.href = "/login"; await new Promise(() => {}); }
+        const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "";
+        while (true) {
+          const { done, value } = await reader.read(); if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf("\n\n")) >= 0) {
+            const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+            let data = null;
+            for (const line of frame.split("\n")) if (line.startsWith("data:")) data = (data || "") + line.slice(5).trim();
+            if (data) { try { const dd = JSON.parse(data); if (dd.line) logLine(logEl, dd.line, dd.level); if (dd.done) res = dd; } catch (e) {} }
+          }
+        }
+      } catch (e) { logLine(logEl, "error: " + e.message, "error"); }
+      return res;
+    }
+
+    // ---- country + address layouts (ported from the setup wizard) ----
+    const COUNTRIES = [
+      ["US","United States"],["CA","Canada"],["GB","United Kingdom"],["IE","Ireland"],
+      ["AU","Australia"],["NZ","New Zealand"],["DE","Germany"],["FR","France"],
+      ["ES","Spain"],["IT","Italy"],["NL","Netherlands"],["BE","Belgium"],
+      ["CH","Switzerland"],["AT","Austria"],["PT","Portugal"],["SE","Sweden"],
+      ["NO","Norway"],["DK","Denmark"],["FI","Finland"],["PL","Poland"],
+      ["CZ","Czechia"],["GR","Greece"],["JP","Japan"],["CN","China"],
+      ["KR","South Korea"],["IN","India"],["SG","Singapore"],["HK","Hong Kong"],
+      ["BR","Brazil"],["MX","Mexico"],["AR","Argentina"],["CL","Chile"],
+      ["CO","Colombia"],["ZA","South Africa"],["NG","Nigeria"],["KE","Kenya"],
+      ["AE","United Arab Emirates"],["IL","Israel"],["TR","Türkiye"],["TH","Thailand"],
+      ["MY","Malaysia"],["ID","Indonesia"],["PH","Philippines"],["VN","Vietnam"],
+    ].map(([code, name]) => ({ code, name }));
+    const GENERIC = [
+      [{k:"line1", label:"Address line 1"}],
+      [{k:"line2", label:"Address line 2 (optional)", opt:true}],
+      [{k:"city", label:"City"}, {k:"state", label:"State / Province / Region (optional)", opt:true}],
+      [{k:"postcode", label:"Postal / ZIP code (optional)", opt:true}],
+    ];
+    const ADDR_FORMATS = {
+      US: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Apt, suite, etc. (optional)",opt:true}],
+           [{k:"city",label:"City"},{k:"state",label:"State"}],[{k:"postcode",label:"ZIP code"}]],
+      CA: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Apt, unit (optional)",opt:true}],
+           [{k:"city",label:"City"},{k:"state",label:"Province"}],[{k:"postcode",label:"Postal code"}]],
+      GB: [[{k:"line1",label:"Address line 1"}],[{k:"line2",label:"Address line 2 (optional)",opt:true}],
+           [{k:"city",label:"Town / City"}],[{k:"state",label:"County (optional)",opt:true}],[{k:"postcode",label:"Postcode"}]],
+      IE: [[{k:"line1",label:"Address line 1"}],[{k:"line2",label:"Address line 2 (optional)",opt:true}],
+           [{k:"city",label:"Town / City"},{k:"state",label:"County"}],[{k:"postcode",label:"Eircode (optional)",opt:true}]],
+      AU: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Unit, etc. (optional)",opt:true}],
+           [{k:"city",label:"Suburb"},{k:"state",label:"State / Territory"}],[{k:"postcode",label:"Postcode"}]],
+      NZ: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Suburb (optional)",opt:true}],
+           [{k:"city",label:"Town / City"}],[{k:"postcode",label:"Postcode"}]],
+      DE: [[{k:"line1",label:"Straße und Hausnummer (Street + number)"}],
+           [{k:"postcode",label:"PLZ"},{k:"city",label:"Stadt (City)"}]],
+      FR: [[{k:"line1",label:"Numéro et rue (Number + street)"}],
+           [{k:"postcode",label:"Code postal"},{k:"city",label:"Ville (City)"}]],
+      ES: [[{k:"line1",label:"Dirección (Address)"}],
+           [{k:"postcode",label:"Código postal"},{k:"city",label:"Ciudad (City)"}],[{k:"state",label:"Provincia (optional)",opt:true}]],
+      IT: [[{k:"line1",label:"Indirizzo (Address)"}],
+           [{k:"postcode",label:"CAP"},{k:"city",label:"Città (City)"}],[{k:"state",label:"Provincia"}]],
+      NL: [[{k:"line1",label:"Straat en huisnummer (Street + number)"}],
+           [{k:"postcode",label:"Postcode"},{k:"city",label:"Plaats (City)"}]],
+      JP: [[{k:"postcode",label:"郵便番号 (Postal code)"}],[{k:"state",label:"都道府県 (Prefecture)"}],
+           [{k:"city",label:"市区町村 (City / Ward)"}],[{k:"line1",label:"番地・建物 (Street / building)"}]],
+      IN: [[{k:"line1",label:"Address line 1"}],[{k:"line2",label:"Address line 2 (optional)",opt:true}],
+           [{k:"city",label:"City"},{k:"state",label:"State"}],[{k:"postcode",label:"PIN code"}]],
+      BR: [[{k:"line1",label:"Endereço (Address)"}],
+           [{k:"postcode",label:"CEP"},{k:"city",label:"Cidade (City)"}],[{k:"state",label:"Estado (State)"}]],
+      MX: [[{k:"line1",label:"Calle y número (Street + number)"}],
+           [{k:"postcode",label:"Código postal"},{k:"city",label:"Ciudad (City)"}],[{k:"state",label:"Estado (State)"}]],
+      ZA: [[{k:"line1",label:"Street address"}],[{k:"line2",label:"Suburb (optional)",opt:true}],
+           [{k:"city",label:"City / Town"}],[{k:"postcode",label:"Postal code"}]],
+    };
+    const addrLayout = (cc) => ADDR_FORMATS[cc] || GENERIC;
+    const countryName = (cc) => (COUNTRIES.find((c) => c.code === cc) || {}).name || "";
+
+    function renderGardenForm() {
+      const g = state.garden || {};
+      const tz = g.tz || (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+      const region = (navigator.language || "").split("-")[1];
+      const cc0 = g.country || (COUNTRIES.some((c) => c.code === region) ? region : "US");
+      const af0 = g.address_fields || {};
+      const fieldHtml = (f, val) => `<div><label>${f.label}</label><input id="af-${f.k}" class="input w-full" value="${esc(val)}"></div>`;
+      const layoutHtml = (cc, fields) => addrLayout(cc).map((rowDef) => {
+        const cells = rowDef.map((f) => fieldHtml(f, fields[f.k] || "")).join("");
+        return rowDef.length === 2 ? `<div class="grid2">${cells}</div>` : cells;
+      }).join("");
+      const opts = COUNTRIES.slice().sort((a, b) => a.name.localeCompare(b.name))
+        .map((c) => `<option value="${c.code}" ${c.code === cc0 ? "selected" : ""}>${c.name}</option>`).join("");
+
+      $("garden-form").innerHTML = `
+        <label>Garden name *</label><input id="g-name" class="input w-full" placeholder="Backyard" value="${esc(g.name)}">
+        <label>Country</label><select id="g-country" class="select w-full">${opts}</select>
+        <div id="g-addr-fields">${layoutHtml(cc0, af0)}</div>
+        <div style="margin-top:12px; display:none"><button class="btn btn-soft" id="g-geo" type="button">${GP.svgUse("gp-pin")} Find it on the map</button></div>
+        <div class="hint" id="g-geo-status" style="display:none"></div>
+        <div class="grid2" style="margin-top:8px; display:none">
+          <div><label>Latitude</label><input id="g-lat" class="input w-full" type="number" step="any" value="${g.lat ?? ""}"></div>
+          <div><label>Longitude</label><input id="g-lon" class="input w-full" type="number" step="any" value="${g.lon ?? ""}"></div>
+        </div>
+        <label>Time zone</label><input id="g-tz" class="input w-full" value="${esc(tz)}">
+        <label>Notes (just for you)</label><textarea id="g-notes" class="textarea w-full" placeholder="raised beds, north fence">${esc(g.notes)}</textarea>
+        <div class="btns"><button class="btn btn-primary" id="g-save">Save changes</button>
+          <span class="msg" id="g-msg"></span></div>`;
+
+      const collectFields = () => {
+        const out = {};
+        addrLayout($("g-country").value).forEach((row) => row.forEach((f) => {
+          const el = $("af-" + f.k); if (el && el.value.trim()) out[f.k] = el.value.trim();
+        }));
+        return out;
+      };
+      $("g-country").onchange = () => {
+        const keep = collectFields();
+        $("g-addr-fields").innerHTML = layoutHtml($("g-country").value, keep);
+      };
+      $("g-geo").onclick = async () => {
+        const cc = $("g-country").value, f = collectFields();
+        const street = [f.line1, f.line2].filter(Boolean).join(" ");
+        if (!street && !f.city && !f.postcode) { $("g-geo-status").innerHTML = "Type your address above first. " + GP.svgUse("gp-search"); return; }
+        $("g-geo-status").textContent = "Looking it up…";
+        try {
+          const r = await api("POST", "/api/wizard/geocode",
+            { country: cc, street, city: f.city || "", state: f.state || "", postalcode: f.postcode || "" });
+          $("g-lat").value = r.lat; $("g-lon").value = r.lon;
+          $("g-geo-status").innerHTML = GP.svgUse("gp-pin") + ` Found: ${esc(r.display_name || (r.lat + ", " + r.lon))}`;
+        } catch (e) { $("g-geo-status").textContent = "Couldn't pin that down — set latitude/longitude by hand below."; }
+      };
+      $("g-save").onclick = saveGarden;
+    }
+
+    async function saveGarden() {
+      const msg = $("g-msg"), btn = $("g-save");
+      const name = $("g-name").value.trim();
+      if (!name) { msg.className = "msg err"; msg.textContent = "Your garden needs a name. 🌿"; return; }
+      const cc = $("g-country").value;
+      const fields = {};
+      addrLayout(cc).forEach((row) => row.forEach((f) => {
+        const el = $("af-" + f.k); if (el && el.value.trim()) fields[f.k] = el.value.trim();
+      }));
+      const parts = [];
+      addrLayout(cc).forEach((row) => row.forEach((f) => { if (fields[f.k]) parts.push(fields[f.k]); }));
+      const cname = countryName(cc); if (cname) parts.push(cname);
+
+      btn.disabled = true; msg.className = "msg muted"; msg.textContent = "Saving…";
+
+      // Behind the scenes automatic geocoding
+      const street = [fields.line1, fields.line2].filter(Boolean).join(" ");
+      if (street || fields.city || fields.postcode) {
+        try {
+          const r = await api("POST", "/api/wizard/geocode",
+            { country: cc, street, city: fields.city || "", state: fields.state || "", postalcode: fields.postcode || "" });
+          $("g-lat").value = r.lat;
+          $("g-lon").value = r.lon;
+        } catch (e) {
+          console.warn("Behind-the-scenes geocoding failed, preserving existing coords or null:", e);
+        }
+      }
+
+      const latV = $("g-lat").value, lonV = $("g-lon").value;
+      const body = {
+        name, country: cc,
+        address_fields: Object.keys(fields).length ? fields : null,
+        address: parts.join(", ") || null,
+        lat: latV === "" ? null : Number(latV), lon: lonV === "" ? null : Number(lonV),
+        tz: $("g-tz").value.trim() || null, notes: $("g-notes").value.trim() || null,
+      };
+      btn.disabled = true; msg.className = "msg muted"; msg.textContent = "Saving…";
+      const res = await streamPost("/api/settings/garden/update/stream", body, $("garden-log"));
+      btn.disabled = false;
+      if (res.ok) { msg.className = "msg ok"; msg.textContent = "Saved ✓"; showToast("Garden details saved"); state.garden = { ...state.garden, ...body }; }
+      else { msg.className = "msg err"; msg.textContent = "Couldn't save — see the log."; }
+    }
+
+    // ---- Security ----
+    $("pc-save").onclick = async () => {
+      const msg = $("pc-msg"), btn = $("pc-save");
+      const cur = $("pc-cur").value, nw = $("pc-new").value, nw2 = $("pc-new2").value;
+      if (nw.length < 6) { msg.className = "msg err"; msg.textContent = "New passcode must be at least 6 characters."; return; }
+      if (nw !== nw2) { msg.className = "msg err"; msg.textContent = "The two new passcodes don't match."; return; }
+      btn.disabled = true; msg.className = "msg muted"; msg.textContent = "Updating…";
+      try {
+        await api("POST", "/api/settings/passcode", { current: cur, new: nw });
+        msg.className = "msg ok"; msg.textContent = "Passcode changed ✓ (use it next time you sign in)";
+        $("pc-cur").value = $("pc-new").value = $("pc-new2").value = ""; showToast("Passcode changed");
+      } catch (e) { msg.className = "msg err"; msg.textContent = e.message; }
+      btn.disabled = false;
+    };
+    const showTokenPreview = (last4) => {
+      if (last4) {
+        $("tok-preview-chars").textContent = last4;
+        $("tok-preview-wrap").style.display = "flex";
+        $("tok-input-wrap").style.display = "none";
+      } else {
+        $("tok-preview-wrap").style.display = "none";
+        $("tok-input-wrap").style.display = "block";
+        $("tok-btn-cancel").style.display = "none";
+      }
+    };
+
+    $("tok-btn-edit").onclick = () => {
+      $("tok-preview-wrap").style.display = "none";
+      $("tok-input-wrap").style.display = "block";
+      $("tok-btn-cancel").style.display = "inline-block";
+      $("tok").value = "";
+      $("tok").focus();
+    };
+
+    $("tok-btn-cancel").onclick = () => {
+      if (state.token_preview) {
+        showTokenPreview(state.token_preview);
+      } else {
+        showTokenPreview(null);
+      }
+    };
+
+    $("tok-save").onclick = async () => {
+      const msg = $("tok-msg"), btn = $("tok-save");
+      const tok = $("tok").value.trim();
+      if (!tok) { msg.className = "msg err"; msg.textContent = "Paste a token first."; return; }
+      btn.disabled = true; msg.className = "msg muted"; msg.textContent = "Saving…";
+      try {
+        const r = await api("POST", "/api/settings/token", { token: tok });
+        msg.className = "msg ok"; msg.textContent = "Token updated ✓";
+        $("tok").value = "";
+        showToast("Fastly token updated");
+        state.has_token = true;
+        state.token_preview = r.token_preview || tok.slice(-4);
+        setTimeout(() => {
+          msg.textContent = "";
+          showTokenPreview(state.token_preview);
+        }, 1000);
+      } catch (e) { msg.className = "msg err"; msg.textContent = e.message; }
+      btn.disabled = false;
+    };
+
+    // ---- Viewer password (optional gate on the live view) ----
+    function renderViewerStatus(on) {
+      state.has_viewer_pass = !!on;
+      const status = $("vp-status"), save = $("vp-save"), clear = $("vp-clear"), input = $("vp-new");
+      if (on) {
+        status.className = "msg ok";
+        status.innerHTML = GP.svgUse("gp-lock", "good") + " A viewer password is required to watch your garden.";
+        save.textContent = "Change password";
+        clear.style.display = "";
+        input.placeholder = "set a new viewer password";
+      } else {
+        status.className = "msg muted";
+        status.innerHTML = GP.svgUse("gp-globe") + " Your garden's live view is open to anyone on your network.";
+        save.textContent = "Require a password";
+        clear.style.display = "none";
+        input.placeholder = "set a password to keep your garden private";
+      }
+    }
+    $("vp-save").onclick = async () => {
+      const msg = $("vp-msg"), btn = $("vp-save"), pw = $("vp-new").value;
+      if (pw.length < 4) { msg.className = "msg err"; msg.textContent = "Pick at least 4 characters."; return; }
+      btn.disabled = true; msg.className = "msg muted"; msg.textContent = "Saving…";
+      try {
+        await api("POST", "/api/settings/viewer-pass", { action: "set", passcode: pw });
+        $("vp-new").value = ""; renderViewerStatus(true);
+        msg.className = "msg ok"; msg.textContent = "Saved ✓ takes a few seconds to kick in";
+        showToast("Viewer password set");
+      } catch (e) { msg.className = "msg err"; msg.textContent = e.message; }
+      btn.disabled = false;
+    };
+    $("vp-clear").onclick = async () => {
+      const msg = $("vp-msg"), btn = $("vp-clear");
+      btn.disabled = true; msg.className = "msg muted"; msg.textContent = "Removing…";
+      try {
+        await api("POST", "/api/settings/viewer-pass", { action: "clear" });
+        $("vp-new").value = ""; renderViewerStatus(false);
+        msg.className = "msg ok"; msg.textContent = "Removed ✓ your garden is open again";
+        showToast("Viewer password removed");
+      } catch (e) { msg.className = "msg err"; msg.textContent = e.message; }
+      btn.disabled = false;
+    };
+
+    // ---- Danger zone ----
+    $("td-confirm").addEventListener("input", () => {
+      $("td-go").disabled = $("td-confirm").value.trim() !== state.garden_id || !state.garden_id;
+    });
+    $("td-go").onclick = async () => {
+      const msg = $("td-msg"), btn = $("td-go");
+      if ($("td-confirm").value.trim() !== state.garden_id) return;
+      btn.disabled = true; msg.className = "msg muted"; msg.textContent = "Tearing down…";
+      const res = await streamPost("/api/settings/teardown/stream", { confirm: state.garden_id }, $("td-log"));
+      if (res.ok) {
+        msg.className = "msg ok"; msg.textContent = "Done — returning to setup…";
+        setTimeout(() => { window.location.href = res.redirect || "/"; }, 1400);
+      } else { msg.className = "msg err"; msg.textContent = "Teardown failed — see the log."; btn.disabled = false; }
+    };
+
+    // ---- boot ----
+    (async function boot() {
+      try {
+        const st = await api("GET", "/api/wizard/state");
+        state.garden = st.garden || {};
+        state.fastly = st.fastly || {};
+        state.node_id = st.node_id || "";
+        state.garden_id = (st.garden && st.garden.garden_id) || "";
+        state.has_token = !!st.has_token;
+        state.token_preview = st.token_preview || null;
+        renderGardenForm();
+        showTokenPreview(state.token_preview);
+        renderViewerStatus(!!st.has_viewer_pass);
+        const fa = state.fastly || {};
+        const row = (k, v, isHtml) => `<span class="k">${esc(k)}</span><span class="v">${isHtml ? v : esc(v || "—")}</span>`;
+
+        let compSvcHtml = "—";
+        if (fa.service_id) {
+          compSvcHtml = `<a href="https://manage.fastly.com/configure/services/${esc(fa.service_id)}" target="_blank" rel="noopener" style="color: var(--brand-link); text-decoration: underline;">${esc(fa.service_id)}</a>`;
+        }
+
+        let cdnSvcHtml = "—";
+        if (fa.cdn_service_id) {
+          cdnSvcHtml = `<a href="https://manage.fastly.com/configure/services/${esc(fa.cdn_service_id)}" target="_blank" rel="noopener" style="color: var(--brand-link); text-decoration: underline;">${esc(fa.cdn_service_id)}</a>`;
+        }
+
+        let edgeUrlHtml = "—";
+        if (fa.backend_url) {
+          edgeUrlHtml = `<a href="${esc(fa.backend_url)}" target="_blank" rel="noopener" style="color: var(--brand-link); text-decoration: underline;">${esc(fa.backend_url)}</a>`;
+        }
+
+        let cdnUrlHtml = "—";
+        if (fa.cdn_url) {
+          cdnUrlHtml = `<a href="${esc(fa.cdn_url)}" target="_blank" rel="noopener" style="color: var(--brand-link); text-decoration: underline;">${esc(fa.cdn_url)}</a>`;
+        }
+
+        $("deploy-kv").innerHTML =
+          row("Garden id", state.garden_id) +
+          row("Garden node", state.node_id) +
+          row("Service name", fa.service_name) +
+          row("Compute Service ID", compSvcHtml, true) +
+          row("Compute Version", fa.active_version ? String(fa.active_version) : "—") +
+          row("CDN Service ID", cdnSvcHtml, true) +
+          row("CDN Version", fa.cdn_service_id ? "1" : "—") +
+          row("Edge URL", edgeUrlHtml, true) +
+          row("Dashboard CDN", cdnUrlHtml, true) +
+          row("Region", fa.region);
+        $("td-confirm").placeholder = state.garden_id || "garden id";
+      } catch (e) {
+        $("garden-form").innerHTML = `<p class="msg err">Couldn't load your settings: ${esc(e.message)}</p>`;
+      }
+      // CPU/RAM (#pi-health) is auto-wired by gp.js initPiHealth() — no per-page JS.
+    })();
+
+    // ---------- show/hide password (eyeball toggle on every password field) ----------
+    (function initPasswordToggles() {
+      const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+      const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20C5 20 1 12 1 12a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+      document.querySelectorAll('input[type="password"]').forEach((inp) => {
+        const wrap = document.createElement("span");
+        wrap.className = "pw-wrap";
+        inp.parentNode.insertBefore(wrap, inp);
+        wrap.appendChild(inp);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "pw-toggle";
+        btn.setAttribute("aria-label", "Show password");
+        btn.title = "Show password";
+        btn.innerHTML = EYE;
+        btn.addEventListener("click", () => {
+          const reveal = inp.type === "password";
+          inp.type = reveal ? "text" : "password";
+          btn.innerHTML = reveal ? EYE_OFF : EYE;
+          const lbl = reveal ? "Hide password" : "Show password";
+          btn.setAttribute("aria-label", lbl); btn.title = lbl;
+        });
+        wrap.appendChild(btn);
+      });
+    })();
+  </script>
+</body>
+</html>

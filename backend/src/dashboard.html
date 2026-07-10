@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Admin</title>
+  <!-- Fastly favicon — served at /favicon.ico (backed by repo-root favicon.ico) -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    /* Base reset, body type, and the generic primitives (.card h2, .badge, button, .toast)
+       all come from gp.css — only dashboard-specific layout + overrides live here. Header/
+       brand/nav/.gp-pill markup is spliced in at the header sentinel below. */
+    /* .conn + .pi-health (CPU/RAM) styling now live in gp.css — single source of truth. */
+    /* The nav is rendered server-side with exactly the right links per tier (admin links
+       are OMITTED for view-only viewers), so it shows immediately — no JS reveal, no flash,
+       works with JS disabled. */
+    /* get-started call-out — shown when no gadgets are set up yet (admin only) */
+    .callout { display: none; gap: 12px; align-items: flex-start; max-width: var(--page-wide); margin: 22px auto -6px;
+      padding: 14px 18px; background: color-mix(in srgb, var(--amber) 8%, var(--panel));
+      border: 1px solid color-mix(in srgb, var(--amber) 35%, var(--hairline));
+      border-left: 3px solid var(--amber); border-radius: var(--radius-md); font-size: 14.5px;
+      box-shadow: var(--shadow-1); }
+    .callout.show { display: flex; }
+    .callout .ct { flex: 1; } .callout b { font-weight: 650; }
+    .callout a { color: var(--blue-ink); font-weight: 600; text-decoration: none; white-space: nowrap; }
+    .callout a:hover { text-decoration: underline; }
+    main {
+      max-width: var(--page-wide);
+      margin: 0 auto;
+      padding: 18px;
+      display: grid;
+      /* 3-col grid so the top row pairs the camera gallery (2/3) with Last Event (1/3);
+         full-width cards still span everything via .card.full { grid-column: 1 / -1 }. */
+      grid-template-columns: repeat(3, 1fr);
+      align-items: start;
+      gap: 16px;
+    }
+    /* Dashboard cards stay flat (override gp.css's .card box-shadow) and a touch tighter
+       (20px -> 16px padding, h2 gap trimmed) so the grid reads denser. */
+    .card { box-shadow: none; padding: 16px; }
+    .card h2 { margin-bottom: 12px; }
+    /* The "image" card — the live gallery, or the single snapshot when there are no
+       cameras — takes the left 2/3 of the top row; Last Event (#status-card, the default
+       .card = 1/3) sits beside it so the row is never left half-empty. The empty-gadget
+       state still promotes #status-card to full width: .card.full sets grid-column on the
+       element itself, and these ID rules don't touch #status-card. */
+    #cameras-card, #snapshot-card { grid-column: span 2; }
+    .snapshot-wrap {
+      position: relative;
+      background: var(--panel-2);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      aspect-ratio: 4 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .snapshot-wrap img { width: 100%; height: 100%; object-fit: contain; display: none; }
+    .snapshot-wrap .placeholder { color: var(--muted); font-size: 14px; }
+    .badges {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    /* .badge base + .label/.value/.sub come from gp.css; only dashboard's status colors here. */
+    .badge.armed .value { color: var(--green-ink); }
+    .badge.disarmed .value { color: var(--red-ink); }
+    .badge.stopped .value { color: var(--amber-ink); }
+    .badge.node-online .value { color: var(--green-ink); }
+    .badge.node-offline .value { color: var(--red-ink); }
+    .badge.raining .value { color: var(--blue-ink); }
+    .event-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 14px; }
+    .event-grid .k { color: var(--muted); }
+    .event-grid .v { font-weight: 600; word-break: break-word; }
+    .event-grid .v.mitigate { color: var(--red-ink); }
+    .event-grid .v.none { color: var(--green-ink); }
+    .ev-detail-link { margin-top: 14px; font-size: 13px; font-weight: 600; color: var(--brand-link);
+      text-decoration: underline; text-underline-offset: 2px; display: inline-flex; align-items: center; gap: 5px; }
+    /* Three-mode segmented control: OFF / MONITOR / ACTIVE. The selected segment is
+       tinted to match its mode (grey / amber / green) so the live mode reads at a glance. */
+    .mode-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 4px;
+      border: 1px solid var(--hairline); border-radius: var(--radius-md); overflow: hidden;
+      background: var(--panel-2); box-shadow: var(--shadow-1); }
+    .mode-seg button { font: inherit; font-weight: 650; font-size: 14px; border: 0; border-radius: 0;
+      padding: 12px 8px; background: transparent; color: var(--muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      border-right: 1px solid var(--hairline); transition: background .12s ease, color .12s ease; }
+    .mode-seg button:last-child { border-right: 0; }
+    .mode-seg button:hover { background: var(--panel); color: var(--text); filter: none; }
+    .mode-seg button:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; z-index: 1; }
+    .mode-seg button .gp-ic { width: 16px; height: 16px; }
+    .mode-seg button.sel[data-cmd="off"]     { background: var(--panel); color: var(--text); box-shadow: inset 0 -3px 0 var(--muted); }
+    .mode-seg button.sel[data-cmd="monitor"] { background: var(--amber-dim); color: var(--amber-ink); box-shadow: inset 0 -3px 0 var(--amber); }
+    .mode-seg button.sel[data-cmd="active"]  { background: var(--green-dim); color: var(--green-ink); box-shadow: inset 0 -3px 0 var(--green); }
+    .mode-help { font-size: 12.5px; color: var(--muted); margin-top: 10px; min-height: 1.2em; }
+    /* The per-event Stop button only appears while a spray is actively firing. */
+    .stop-row { margin-top: 14px; display: none; }
+    .stop-row.show { display: block; }
+    .stop-row .gp-ic { width: 16px; height: 16px; }
+    .stop-row .sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 14px; }
+    /* .toast + .show/.error come from gp.css. */
+    /* Optional-peripheral tiles (rendered only when the matching sensor reports). */
+    .badge.ok .value { color: var(--green-ink); }
+    .badge.warn .value { color: var(--amber-ink); }
+    .badge.bad .value { color: var(--red-ink); }
+    .optnote { font-size: 11px; color: var(--muted); margin: 2px 0 10px; }
+    /* Activity timeline */
+    .activity { list-style: none; margin: 0; padding: 0; }
+    .activity li {
+      display: grid;
+      grid-template-columns: 150px auto 1fr;
+      gap: 12px;
+      padding: 9px 4px;
+      border-bottom: 1px solid var(--hairline);
+      font-size: 13px;
+      align-items: baseline;
+    }
+    
+    /* Live camera gallery (edge view-only surface) */
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+    /* The live camera gallery now lives in the 2/3 top-row card, so stretch its tiles to
+       fill that width (auto-fit collapses the empty trailing track) instead of leaving a
+       gap. The shared .gallery (History grid) keeps auto-fill so its many thumbnails stay
+       dense. */
+    #cam-gallery { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .cam-tile { background: var(--panel-2); border: 1px solid var(--hairline); border-radius: var(--radius-md);
+      overflow: hidden; box-shadow: var(--shadow-1); transition: border-color .12s ease, box-shadow .12s ease; }
+    .cam-tile:hover { border-color: color-mix(in srgb, var(--brand) 40%, var(--hairline)); box-shadow: var(--shadow-2); }
+    .cam-frame { position: relative; aspect-ratio: 4 / 3; background: #000; display: flex; align-items: center; justify-content: center; }
+    .cam-frame img { width: 100%; height: 100%; object-fit: cover; display: none; cursor: zoom-in; }
+    .cam-frame .ph { color: var(--muted); font-size: 13px; text-align: center; padding: 14px; }
+    .cam-live { position: absolute; top: 8px; left: 8px; display: none; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 700; color: #fff; background: rgba(214,67,59,.92); padding: 2px 8px; border-radius: 20px; }
+    .cam-live.show { display: inline-flex; }
+    .cam-live .d { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+    .cam-body { padding: 10px 12px; }
+    .cam-name { font-weight: 650; font-size: 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .cam-pill { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: var(--radius-pill); border: 1px solid var(--hairline);
+      color: var(--muted); background: var(--panel); white-space: nowrap; }
+    .cam-pill.on { color: var(--green-ink); border-color: var(--green); background: color-mix(in srgb, var(--green) 12%, var(--panel)); }
+    .cam-pill.off { color: var(--red-ink); border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--panel)); }
+    .cam-event { color: var(--muted); font-size: 12.5px; margin-top: 6px; min-height: 16px; }
+    .cam-detail { color: var(--brand-link); text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
+    /* History / archive (edge view-only) */
+    .arch-days { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .arch-chip { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: var(--radius-pill);
+      border: 1px solid var(--hairline); background: var(--panel-2); color: var(--text); cursor: pointer;
+      transition: border-color .12s ease, color .12s ease, background .12s ease; }
+    .arch-chip:hover { border-color: var(--muted); background: var(--panel-3); }
+    /* Selected day = a FILLED brand pill (luminance + weight cue, not a faint green tint) so
+       the active day reads for a colorblind viewer by more than hue — mirrors nav.active. */
+    .arch-chip.active { border-color: var(--brand); color: var(--brand-ink);
+      background: var(--brand); font-weight: 700; }
+    .arch-tile { background: var(--panel-2); border: 1px solid var(--hairline); border-radius: var(--radius-md);
+      overflow: hidden; box-shadow: var(--shadow-1); transition: border-color .12s ease, box-shadow .12s ease; }
+    .arch-tile:hover { border-color: color-mix(in srgb, var(--brand) 40%, var(--hairline)); box-shadow: var(--shadow-2); }
+    .arch-tile .fr { aspect-ratio: 4 / 3; background: #000; }
+    .arch-tile img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+    .arch-tile .cap { padding: 8px 10px; font-size: 12.5px; }
+    .arch-tile .cap .a { font-weight: 600; }
+    .arch-tile .cap .a.sprayed { color: var(--red-ink); }
+    .arch-tile .cap .t { color: var(--muted); margin-top: 2px; }
+    /* Multi-angle set tile: the several cameras captured in ONE tick, grouped by batch id
+       so the angles read as a single moment. Each thumbnail opens that frame in the lightbox. */
+    .arch-set .arch-set-fr { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; background: #000; }
+    .arch-set-thumb { position: relative; border: 0; padding: 0; margin: 0; background: #000; cursor: zoom-in; display: block; }
+    .arch-set-thumb img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+    .arch-set-thumb:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+    .arch-set-cam { position: absolute; left: 0; right: 0; bottom: 0; font-size: 10.5px; font-weight: 600;
+      padding: 2px 6px; background: rgba(0,0,0,.55); color: #fff; text-align: left;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .arch-note { color: var(--muted); font-size: 13px; padding: 4px 2px; }
+    .arch-more { font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 12px; border-radius: var(--radius-pill);
+      border: 1px solid var(--hairline); background: var(--panel-2); color: var(--green-ink); cursor: pointer;
+      transition: border-color .12s ease, background .12s ease; }
+    .arch-more:hover { border-color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--panel-2)); }
+    /* History filter bar */
+    /* History heading row: title + Play-timelapse together, so the button never detaches
+       onto a wrapped filter line (it wraps cleanly under the title on narrow screens). */
+    .arch-head { display: flex; align-items: center; justify-content: space-between;
+      gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
+    .arch-head h2 { margin: 0; }
+    /* Sticky filter bar: full-bleed across the card's padding (negative margin +
+       restored inset) so it escapes the padded-card sticky trap and its background covers
+       the grid scrolling underneath, edge to edge. The horizontal bleed MUST equal the
+       .card padding above (16px = --space-4) — using a larger value made the bar jut past
+       the card edges and overflow the page. */
+    .arch-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px;
+      position: sticky; top: 0; z-index: 3; background: var(--panel);
+      margin: 0 calc(-1 * var(--space-4)) var(--space-3); padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--hairline); }
+    .arch-f { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+    .arch-f select, .arch-f input[type=date] { font: inherit; font-size: 13px; font-weight: 500; text-transform: none;
+      letter-spacing: 0; height: 34px; box-sizing: border-box; padding: 0 8px; border-radius: 8px;
+      border: 1px solid var(--hairline); background: var(--panel-2); color: var(--text); }
+    .arch-summary { color: var(--muted); font-size: 13px; margin: 2px 0 12px; }
+    /* Lightbox */
+    .arch-lb .arch-lb-card { background: var(--panel); border: 1px solid var(--hairline); border-radius: 12px;
+      box-shadow: var(--shadow-overlay); width: min(96vw, 1100px); max-height: 92vh; overflow: hidden;
+      display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: 1fr auto; position: relative; }
+    .arch-lb-img { grid-column: 1 / 4; grid-row: 1; width: 100%; max-height: 78vh; object-fit: contain;
+      background: #000; display: block; }
+    .arch-lb-nav { grid-row: 1; align-self: center; z-index: 2; width: 44px; height: 64px; margin: 8px;
+      border: none; border-radius: var(--radius-sm); background: var(--scrim); color: var(--scrim-ink); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; }
+    .arch-lb-nav:hover { background: var(--scrim-strong); }
+    .arch-lb-nav.prev { grid-column: 1; } .arch-lb-nav.next { grid-column: 3; justify-self: end; }
+    .arch-lb-nav.prev .gp-ic { transform: scaleX(-1); }
+    .arch-lb-nav[disabled] { opacity: .3; cursor: default; }
+    .arch-lb-nav .gp-ic { width: 22px; height: 22px; }
+    .arch-lb-x { position: absolute; top: 10px; right: 10px; z-index: 3; width: 34px; height: 34px; border: none;
+      border-radius: var(--radius-sm); background: var(--scrim); color: var(--scrim-ink); cursor: pointer; display: inline-flex;
+      align-items: center; justify-content: center; }
+    .arch-lb-x:hover { background: var(--scrim-strong); }
+    .arch-lb-cap { grid-column: 1 / 4; grid-row: 2; padding: 12px 16px; border-top: 1px solid var(--hairline); }
+    .arch-lb-cap .a { font-weight: 700; font-size: 15px; }
+    .arch-lb-cap .a.sprayed { color: var(--red-ink); }
+    .arch-lb-cap .t { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .arch-lb-actions { margin-top: 10px; display: flex; gap: 16px; font-size: 13px; font-weight: 600; }
+    .arch-lb-actions a { cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+
+    /* Responsive overrides */
+    @media (max-width: 760px) {
+      main {
+        grid-template-columns: 1fr;
+        padding: 16px 12px;
+        gap: 16px;
+      }
+      /* Single column on mobile: collapse the 2/3 top-row spans so they don't conjure an
+         implicit second track (grid-column: span 2 against a 1-col template would). */
+      #cameras-card, #snapshot-card { grid-column: 1 / -1; }
+      header {
+        padding: 12px 16px;
+      }
+      .card {
+        padding: 16px;
+      }
+      .activity li {
+        grid-template-columns: 1fr;
+        gap: 4px;
+        padding: 10px 4px;
+      }
+      .activity .when {
+        font-size: 11px;
+      }
+    }
+    /* Garden Node setup modal — opened from the node tile when it's never reported.
+       Reuses the shared overlay look (panel/border/shadow tokens); see hardware/costs.html. */
+    #badge-node.clickable { cursor: pointer; }
+    #badge-node.clickable:hover { border-color: var(--blue); }
+    .node-cta { display: none; font-size: 11px; color: var(--brand-link); font-weight: 600; margin-top: 4px;
+      text-decoration: underline; text-underline-offset: 2px; }
+    #badge-node.clickable .node-cta { display: block; }
+    .node-modal-bg { position: fixed; inset: 0; background: var(--scrim); display: none;
+      align-items: center; justify-content: center; padding: 20px; z-index: 60; }
+    .node-modal-bg.show { display: flex; }
+    .node-modal { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+      width: 100%; max-width: 460px; padding: 24px 26px; box-shadow: var(--shadow-overlay); }
+    .node-modal h3 { margin: 0 0 4px; font-size: 19px; display: flex; align-items: center; gap: 9px; }
+    .node-modal h3 .gp-ic { width: 22px; height: 22px; color: var(--brand); }
+    .node-modal p { margin: 8px 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .node-modal ul { margin: 8px 0 4px; padding-left: 20px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .node-modal .actions { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .activity li:last-child { border-bottom: none; }
+    .activity .when { color: var(--muted); font-size: 12px; }
+    .activity .act { font-weight: 700; }
+    .activity .act.mitigate { color: var(--red-ink); }
+    .activity .act.none { color: var(--green-ink); }
+    .activity .sp { color: var(--text); }
+    .activity .why { color: var(--amber-ink); font-size: 12px; }
+    .activity .empty { color: var(--muted); padding: 8px 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + all controls (status, Pi health, conn, tz, theme) come from the shared header partial -->
+  </header>
+
+  <!-- Shown only on the Pi portal when no gadgets are registered yet (see JS). -->
+  <div id="gp-empty" class="callout">
+    <span class="ic"><svg class="gp-ic brand"><use href="#gp-leaf"/></svg></span>
+    <div class="ct"><b>Your garden has no gadgets yet.</b> Add a camera, sensor, or deterrent so it can
+      start watching over things. <a href="/devices">Set up gadgets →</a></div>
+  </div>
+
+  <main>
+    <!-- Live multi-camera gallery (edge view-only surface; revealed by initCameras
+         when the garden has registered cameras). Replaces the single-snapshot card. -->
+    <section id="cameras-card" class="card" style="display:none">
+      <h2>Cameras</h2>
+      <div id="cam-gallery" class="gallery"></div>
+      <div class="hint">Each camera's most recent picture, refreshed every ~5&nbsp;s. Click a picture to enlarge.</div>
+    </section>
+
+    <!-- Date-browsable history of past events/photos (edge view-only; revealed by
+         initArchive). Backed by the FOS object archive via /api/archive/*. -->
+    <section id="archive-card" class="card full" style="display:none">
+      <div class="arch-head">
+        <h2>History</h2>
+        <button id="arch-timelapse" class="btn btn-primary btn-sm gap-2" type="button">Play timelapse</button>
+      </div>
+      <div id="arch-filters" class="arch-filters">
+        <label class="arch-f">Camera
+          <select id="arch-cam"><option value="">All cameras</option></select></label>
+        <label class="arch-f">Type
+          <select id="arch-type">
+            <option value="">All</option>
+            <option value="sighting">Sightings</option>
+            <option value="sprayed">Sprayed</option>
+            <option value="clear">All clear</option>
+          </select></label>
+        <label class="arch-f">Sort
+          <select id="arch-sort">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select></label>
+        <label class="arch-f">From <input type="date" id="arch-from"></label>
+        <label class="arch-f">To <input type="date" id="arch-to"></label>
+      </div>
+      <div id="arch-days" class="arch-days"></div>
+      <div id="arch-summary" class="arch-summary" role="status" aria-live="polite"></div>
+      <div id="arch-grid" class="gallery"></div>
+      <div id="arch-note" class="arch-note"></div>
+    </section>
+
+    <!-- History photo lightbox (reuses the shared .modal overlay; image-sized card). -->
+    <div id="arch-lightbox" class="modal arch-lb" role="dialog" aria-modal="true" aria-label="Photo viewer">
+      <div class="arch-lb-card">
+        <button class="arch-lb-x" id="arch-lb-close" type="button" aria-label="Close"></button>
+        <button class="arch-lb-nav prev" id="arch-lb-prev" type="button" aria-label="Previous photo"></button>
+        <img class="arch-lb-img" id="arch-lb-img" alt="">
+        <button class="arch-lb-nav next" id="arch-lb-next" type="button" aria-label="Next photo"></button>
+        <div class="arch-lb-cap">
+          <div class="a" id="arch-lb-a"></div>
+          <div class="t" id="arch-lb-t"></div>
+          <div class="arch-lb-actions">
+            <a id="arch-lb-detail"></a>
+            <a id="arch-lb-open" target="_blank" rel="noopener"></a>
+            <a id="arch-lb-tl"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section id="snapshot-card" class="card">
+      <h2>Latest Snapshot</h2>
+      <div class="snapshot-wrap">
+        <span id="snap-placeholder" class="placeholder">No evidence captured yet</span>
+        <img id="snapshot" alt="Latest evidence snapshot" />
+      </div>
+      <div class="hint">
+        Your garden's most recent photo, refreshed every few seconds. Full live video is available on your home network.
+      </div>
+    </section>
+
+    <section id="status-card" class="card">
+      <!-- Armed / Mitigation now live in the header (every page) via GP.subscribeState;
+           this card focuses on the latest event + the admin controls. -->
+      <h2>Last Event</h2>
+      <div class="event-grid">
+        <span class="k">Species</span><span id="ev-species" class="v">&mdash;</span>
+        <span class="k">Confidence</span><span id="ev-conf" class="v">&mdash;</span>
+        <span class="k">Action</span><span id="ev-action" class="v">&mdash;</span>
+        <span class="k">When</span><span id="ev-ts" class="v">&mdash;</span>
+      </div>
+      <!-- Deep-link to the full event detail page; shown only once a frame with an archive
+           key has arrived (older live snapshots carry no key — see publish_evidence). -->
+      <a id="ev-detail" class="ev-detail-link" href="#" style="display:none">View event details &rarr;</a>
+
+      <!-- Admin-only: hidden when window.GP_VIEW_ONLY is true (the edge serves
+           view-only; the Pi LAN portal serves with controls). The three-mode selector
+           sets the operational mode; the Stop button is per-event (a one-shot abort of
+           the spray firing right now) and only appears while a spray is live. -->
+      <div id="admin-controls">
+        <h2 style="margin-top:22px">Protection</h2>
+        <div class="mode-seg" id="mode-seg" role="group" aria-label="Protection mode">
+          <button type="button" data-cmd="off">Off</button>
+          <button type="button" data-cmd="monitor">Monitor</button>
+          <button type="button" data-cmd="active">Active</button>
+        </div>
+        <div id="mode-help" class="mode-help">&mdash;</div>
+        <!-- Per-event "smart Stop": shown only while a deterrent is firing right now. -->
+        <div id="stop-row" class="stop-row">
+          <button class="btn btn-warning btn-block" data-cmd="stop" id="stop-btn"
+            title="Not an animal? Stop this spray — protection stays on for the next one.">
+            Stop this spray
+          </button>
+          <div class="sub">Not an animal? Stop this spray — protection stays on for the next one.</div>
+        </div>
+      </div>
+      <div id="view-only-note" class="hint" style="display:none">
+        Read-only view. Garden controls are available to admins on the local network.
+      </div>
+    </section>
+
+    <section id="health-card" class="card full">
+      <h2>Node Health &amp; Environment</h2>
+      <div class="badges">
+        <div id="badge-node" class="badge">
+          <div class="label">Garden Node</div>
+          <div id="val-node" class="value">&mdash;</div>
+          <div id="val-node-seen" class="sub">&mdash;</div>
+          <div class="node-cta">Tap to set up &rarr;</div>
+        </div>
+        <div class="badge">
+          <div class="label">Battery</div>
+          <div id="val-batt" class="value">&mdash;</div>
+        </div>
+        <div class="badge">
+          <div class="label">Temperature</div>
+          <div id="val-temp" class="value">&mdash;</div>
+        </div>
+        <div class="badge">
+          <div class="label">Humidity</div>
+          <div id="val-humidity" class="value">&mdash;</div>
+        </div>
+        <div id="badge-rain" class="badge">
+          <div class="label">Rain</div>
+          <div id="val-rain" class="value">&mdash;</div>
+          <div id="val-rain-sub" class="sub">&mdash;</div>
+        </div>
+      </div>
+      <div id="opt-note" class="optnote" style="display:none">Optional peripherals (shown when fitted &amp; reporting):</div>
+      <div id="opt-badges" class="badges"></div>
+      <div class="hint">
+        Your garden hub checks in about once a minute; if it goes quiet for a couple of
+        minutes it shows <b>OFFLINE</b> &mdash; and while it's quiet the sprayer stays safely
+        shut off. When it's raining, sprays pause on their own (critters tend to stay
+        tucked away in the wet).
+      </div>
+    </section>
+
+    <section id="activity-card" class="card full">
+      <h2>Recent Activity</h2>
+      <ul id="activity" class="activity"><li class="empty">No events observed yet this session.</li></ul>
+      <div class="hint">
+        Each evidence post is logged here (newest first), captured live from the state
+        poll while this page is open. <code>mitigate</code> fired a deterrent;
+        <code>none</code> stood down (a reason like <i>rain</i> / <i>human</i> explains a
+        withheld critter).
+      </div>
+    </section>
+  </main>
+
+  <!-- Garden Node setup modal — opened from the node tile when the node has never reported.
+       Brief + friendly; the full walkthrough lives on /help. -->
+  <div id="node-modal" class="node-modal-bg" role="dialog" aria-modal="true" aria-labelledby="node-modal-title">
+    <div class="node-modal">
+      <h3 id="node-modal-title"><svg class="gp-ic" aria-hidden="true"><use href="#gp-leaf"/></svg> Set up your Garden Node</h3>
+      <p>The Garden Node is the little battery-powered box that lives out in the garden &mdash; it
+        watches for visitors, reads the weather (temperature, humidity, rain), and switches on the
+        spray when something needs shooing off.</p>
+      <p><b>What you'll need:</b></p>
+      <ul>
+        <li>The node board and its radar sensor</li>
+        <li>A spray gadget (pump + nozzle) and its power</li>
+        <li>A few minutes to get it connected</li>
+      </ul>
+      <div class="actions">
+        <a class="btn btn-primary gap-2" href="/help"><svg class="gp-ic" aria-hidden="true"><use href="#gp-question"/></svg> Open setup guide</a>
+        <button class="btn btn-ghost" type="button" id="node-modal-close">Maybe later</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const isHistoryPage = window.location.pathname === "/history";
+    // Whether the last state poll reported an evidence event. Used to avoid probing
+    // /api/snapshot (and logging a 404 every cycle) before any evidence exists.
+    let hasEvent = false;
+    // Session-local activity timeline, accumulated from the state poll (the edge
+    // keeps only the latest event; a durable history is a future KV-ring concern,
+    // deliberately NOT added to the latency-sensitive evidence path).
+    const ACTIVITY_MAX = 25;
+    const activity = [];
+    let lastActivityTs = null;
+
+    function setConn(online) {
+      const el = $("conn");
+      el.className = "conn " + (online ? "online" : "offline");
+      $("conn-text").textContent = online ? "online" : "offline";
+    }
+
+    function showToast(msg, isError) {
+      const t = $("toast");
+      t.textContent = msg;
+      t.className = "toast show" + (isError ? " error" : "");
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => { t.className = "toast"; }, 2500);
+    }
+
+    function fmtTs(ms) {
+      return GP.fmtTs(ms);   // renders in the viewer's chosen display timezone (header picker)
+    }
+
+    function fmtAgo(secs) {
+      if (secs == null) return "never seen";
+      if (secs < 60) return "seen " + secs + "s ago";
+      const m = Math.floor(secs / 60);
+      if (m < 60) return "seen " + m + "m ago";
+      const h = Math.floor(m / 60);
+      return "seen " + h + "h ago";
+    }
+
+    function num(v, digits, unit) {
+      return v != null && !isNaN(Number(v))
+        ? Number(v).toFixed(digits) + (unit || "")
+        : "—";
+    }
+
+    function renderNode(node) {
+      const online = !!(node && node.online);
+      // "Never seen" = no node has ever reported (no seconds_since at all).
+      const neverSeen = !node || node.seconds_since == null;
+      const tile = $("badge-node");
+      tile.className = "badge " + (online ? "node-online" : "node-offline");
+      // Make the tile a setup affordance when the node is offline / never reported.
+      tile.classList.toggle("clickable", !online);
+      if (!online) {
+        tile.setAttribute("role", "button"); tile.setAttribute("tabindex", "0");
+        tile.setAttribute("aria-label", "Garden Node " + (neverSeen ? "not set up" : "offline") + " — open setup guide");
+      } else {
+        tile.removeAttribute("role"); tile.removeAttribute("tabindex"); tile.removeAttribute("aria-label");
+      }
+      $("val-node").textContent = online ? "ONLINE" : neverSeen ? "NOT SET UP" : "OFFLINE";
+      $("val-node-seen").textContent = node ? fmtAgo(node.seconds_since) : "—";
+
+      const t = node && node.telemetry && typeof node.telemetry === "object" ? node.telemetry : null;
+      $("val-batt").textContent = t ? num(t.battery_voltage, 2, " V") : "—";
+      $("val-temp").textContent = t ? num(t.temperature_c, 1, " °C") : "—";
+      $("val-humidity").textContent = t ? num(t.humidity_pct, 0, " %") : "—";
+
+      // Rain tile doubles as the spray-suppression indicator.
+      const rainBadge = $("badge-rain");
+      const raining = !!(t && t.raining);
+      rainBadge.className = "badge" + (raining ? " raining" : "");
+      $("val-rain").textContent = t && (t.raining != null) ? (raining ? "RAINING" : "Dry") : "—";
+      const mm = t && t.rainfall_mm != null ? num(t.rainfall_mm, 1, " mm") : null;
+      $("val-rain-sub").textContent = raining
+        ? "spray suppressed" + (mm ? " · " + mm : "")
+        : (mm ? mm : "—");
+
+      renderOptional(t);
+    }
+
+    // Optional-peripheral tiles: rendered only for the fields actually present in
+    // telemetry, so fitting a sensor needs no dashboard change (the edge stores any
+    // JSON; we surface the keys we recognize). See docs/endpoint-contract.md.
+    function renderOptional(t) {
+      const host = $("opt-badges");
+      if (!t) { host.innerHTML = ""; $("opt-note").style.display = "none"; return; }
+      const tiles = [];
+      if (t.soil_moisture_pct != null) {
+        const v = Number(t.soil_moisture_pct);
+        tiles.push({ label: "Soil moisture", value: num(v, 0, " %"), cls: v < 25 ? "warn" : "" });
+      }
+      if (t.reservoir_ok != null) {
+        tiles.push({ label: "Reservoir", value: t.reservoir_ok ? "OK" : "EMPTY", cls: t.reservoir_ok ? "ok" : "bad" });
+      }
+      if (t.spray_confirmed != null) {
+        tiles.push({ label: "Last spray", value: t.spray_confirmed ? "CONFIRMED" : "NO FLOW", cls: t.spray_confirmed ? "ok" : "bad" });
+      }
+      if (t.presence_distance_cm != null) {
+        tiles.push({ label: "Presence", value: num(t.presence_distance_cm, 0, " cm"), cls: "" });
+      }
+      if (t.on_backup_power != null) {
+        tiles.push({ label: "Power", value: t.on_backup_power ? "BACKUP" : "MAINS", cls: t.on_backup_power ? "warn" : "ok" });
+      }
+      $("opt-note").style.display = tiles.length ? "block" : "none";
+      host.innerHTML = tiles.map((x) =>
+        '<div class="badge ' + x.cls + '"><div class="label">' + x.label +
+        '</div><div class="value">' + x.value + "</div></div>").join("");
+    }
+
+    // Append a newly-observed evidence event to the session timeline (dedup by ts).
+    function pushActivity(ev) {
+      if (!ev || typeof ev !== "object" || ev.ts == null || ev.ts === lastActivityTs) return;
+      lastActivityTs = ev.ts;
+      activity.unshift(ev);
+      if (activity.length > ACTIVITY_MAX) activity.pop();
+      const ul = $("activity");
+      if (!activity.length) { ul.innerHTML = '<li class="empty">No events observed yet this session.</li>'; return; }
+      ul.innerHTML = activity.map((e) => {
+        const action = e.action != null ? String(e.action) : "—";
+        const conf = e.confidence != null ? " (" + (Number(e.confidence) * 100).toFixed(0) + "%)" : "";
+        const why = e.reason ? '<span class="why">held: ' + esc(e.reason) + "</span>" : "<span></span>";
+        // Link the row to the event detail page when this snapshot carries an archive key.
+        const det = e.key ? ' <a class="cam-detail" href="/event?key=' + encodeURIComponent(e.key) +
+          (e.reason ? "&reason=" + encodeURIComponent(e.reason) : "") + '">details</a>' : "";
+        return '<li><span class="when">' + esc(fmtTs(e.ts)) + '</span>' +
+          '<span class="act ' + esc(action) + '">' + esc(action) + "</span>" +
+          '<span class="sp">' + esc(e.species != null ? String(e.species) : "—") + conf + " " + why + det + "</span></li>";
+      }).join("");
+    }
+
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    // One-line explainer per mode (matches the friendly /help copy).
+    const MODE_HELP = {
+      off: "Off — your garden isn't watching or spraying.",
+      monitor: "Monitor — keeps an eye out and lets you know, but never sprays.",
+      active: "Active — watches your garden and gives confirmed critters a spritz.",
+    };
+
+    // Reflect live state onto the admin controls: mark the selected mode segment, update
+    // the one-line helper, and show the per-event Stop ONLY while a spray is firing now.
+    // Skipped while a command is in flight (sendControl disables the controls for that
+    // window). "Spraying" is detected via GP.displayState (mitigate event in the last
+    // minute on top of ACTIVE) — the same logic that pulses the header pill.
+    function renderControls(s) {
+      if (controlInFlight) return;
+      const mode = GP.mode(s);          // "off" | "monitor" | "active"
+      document.querySelectorAll("#mode-seg button[data-cmd]").forEach((b) => {
+        b.classList.toggle("sel", b.dataset.cmd === mode);
+        b.setAttribute("aria-pressed", b.dataset.cmd === mode ? "true" : "false");
+      });
+      const help = $("mode-help"); if (help) help.textContent = MODE_HELP[mode] || "";
+      // Per-event Stop: visible only while a deterrent is actually firing. Hidden (not
+      // just disabled) otherwise, so there's never a "dumb Stop" with nothing to stop.
+      const firing = GP.displayState(s) === "spraying";
+      const row = $("stop-row"); if (row) row.classList.toggle("show", firing);
+    }
+
+    function renderState(s) {
+      // Armed / Mitigation are rendered in the shared header (GP.subscribeState ->
+      // renderStatusPills, on every page), so this card no longer duplicates them.
+
+      // Last event
+      const ev = s.latest_event;
+      if (ev && typeof ev === "object") {
+        hasEvent = true;
+        $("ev-species").textContent = ev.species != null ? String(ev.species) : "—";
+        $("ev-conf").textContent = ev.confidence != null
+          ? (Number(ev.confidence) * 100).toFixed(1) + "%"
+          : "—";
+        const action = ev.action != null ? String(ev.action) : "—";
+        const actionEl = $("ev-action");
+        // A veto reason (e.g. "rain") explains why a critter wasn't sprayed.
+        actionEl.textContent = ev.reason ? action + " (" + ev.reason + ")" : action;
+        actionEl.className = "v " + (action === "mitigate" ? "mitigate" : action === "none" ? "none" : "");
+        $("ev-ts").textContent = fmtTs(ev.ts);
+        // Deep-link to the detail page. `key` is the durable archive object key (added to
+        // latest_event by the edge); pass the live veto `reason` through since the key alone
+        // doesn't persist it. Older snapshots have no key -> hide the link.
+        const det = $("ev-detail");
+        if (det) {
+          if (ev.key) {
+            det.href = "/event?key=" + encodeURIComponent(ev.key) +
+              (ev.reason ? "&reason=" + encodeURIComponent(ev.reason) : "");
+            det.style.display = "inline-flex";
+          } else { det.style.display = "none"; }
+        }
+      } else {
+        hasEvent = false;
+        $("ev-species").textContent = "—";
+        $("ev-conf").textContent = "—";
+        $("ev-action").textContent = "—";
+        $("ev-action").className = "v";
+        $("ev-ts").textContent = "—";
+        const det = $("ev-detail"); if (det) det.style.display = "none";
+      }
+
+      // Node health + environment tiles.
+      renderNode(s.node);
+
+      // Append any new evidence event to the session activity timeline.
+      pushActivity(s.latest_event);
+
+      // Reflect live state on the control buttons (disable no-op actions).
+      renderControls(s);
+    }
+
+    // Latest state snapshot (kept so a timezone change can re-render without a refetch).
+    let latestState = null;
+    let lastStateAt = 0;
+
+    // Single shared state feed: SSE on the Pi portal, polling on the edge view-only build
+    // (see GP.subscribeState). Drives the rich card here AND the header pills, over one
+    // connection — no per-page poll loop. Connectivity is inferred from snapshot recency
+    // (a watchdog below), since the feed delivers a heartbeat at least every ~10s.
+    function onStateSnapshot(s) {
+      latestState = s;
+      lastStateAt = Date.now();
+      setConn(true);
+      renderState(s);
+      refreshSnapshot();
+    }
+
+    function refreshSnapshot() {
+      // Wait until initCameras() has decided single-vs-gallery: probing /api/snapshot
+      // before that races a multi-camera garden into a spurious 404 every snapshot.
+      if (cameraInitPending) return;
+      // The multi-camera gallery (edge) supersedes the single snapshot card.
+      if (galleryActive) return;
+      // Don't probe until an evidence event exists, else /api/snapshot 404s every
+      // cycle (console noise) during the normal pre-evidence window.
+      if (!hasEvent) return;
+      const img = $("snapshot");
+      const probe = new Image();
+      probe.onload = () => {
+        img.src = probe.src;
+        img.style.display = "block";
+        $("snap-placeholder").style.display = "none";
+      };
+      probe.onerror = () => {
+        // 404 = no snapshot yet; keep the placeholder.
+        img.style.display = "none";
+        $("snap-placeholder").style.display = "block";
+      };
+      probe.src = "/api/snapshot?t=" + Date.now();
+    }
+
+    // Friendly per-command confirmation copy (no jargon — see user-facing-copy convention).
+    const CMD_TOAST = {
+      off: "Protection turned off",
+      monitor: "Switched to Monitor (watch & alert only)",
+      active: "Protection is Active",
+      stop: "Stopped this spray — protection stays on",
+    };
+
+    async function sendControl(cmd) {
+      const buttons = document.querySelectorAll("#admin-controls button[data-cmd]");
+      controlInFlight = true;
+      buttons.forEach((b) => (b.disabled = true));
+      try {
+        // GP.control POSTs /api/control, returns the new state, and fans it to every
+        // subscriber (including onStateSnapshot here -> renderState/renderControls), so the
+        // UI updates without waiting for the next feed tick. It's a no-op under view-only.
+        const s = await GP.control(cmd);
+        setConn(true);
+        if (s) latestState = s;
+        showToast(CMD_TOAST[cmd] || ("Command sent: " + cmd), false);
+      } catch (e) {
+        if (e && typeof e.status === "number") {
+          // We reached the server; it rejected the command (e.g. 403 on the edge).
+          setConn(true);
+          showToast("Command rejected (" + e.status + ")", true);
+        } else {
+          // True network failure -> the connection is down.
+          setConn(false);
+          showToast("Command failed (offline)", true);
+        }
+      } finally {
+        controlInFlight = false;
+        // Re-enable the controls we disabled above. WITHOUT this the buttons stay
+        // disabled after the first command, so the next click (e.g. ACTIVE after OFF)
+        // silently does nothing until a page reload.
+        buttons.forEach((b) => (b.disabled = false));
+        renderControls(latestState);  // restore per-state selection/visibility
+      }
+    }
+
+    // View-only mode (set by the edge via window.GP_VIEW_ONLY): hide the admin
+    // controls and don't wire them up. The Pi LAN portal leaves this false, so
+    // admins on the local network keep full control. Default (flag absent) = admin.
+    // (The admin NAV LINKS themselves are omitted server-side via render_nav — there is
+    // nothing to hide here, and referencing them would throw on the edge.)
+    const VIEW_ONLY = !!window.GP_VIEW_ONLY;
+
+    // Show/hide sections based on whether this is the History or Dashboard view.
+    // The nav active class is set server-side by render_nav — no JS needed for that.
+    if (isHistoryPage) {
+      if ($("archive-card")) $("archive-card").style.display = "";
+      if ($("snapshot-card")) $("snapshot-card").style.display = "none";
+      if ($("status-card")) $("status-card").style.display = "none";
+      if ($("cameras-card")) $("cameras-card").style.display = "none";
+      if ($("health-card")) $("health-card").style.display = "none";
+      if ($("activity-card")) $("activity-card").style.display = "none";
+      if ($("gp-empty")) $("gp-empty").style.display = "none";
+    } else {
+      if ($("archive-card")) $("archive-card").style.display = "none";
+    }
+
+    if (VIEW_ONLY) {
+      const ac = $("admin-controls");
+      if (ac) ac.style.display = "none";
+      const note = $("view-only-note");
+      if (note) note.style.display = "block";
+      document.title = isHistoryPage ? "Fastly Garden Protector — History" : "Fastly Garden Protector — Live View";
+      // Load cameras first so the History feed can label events with friendly camera
+      // names (camNameById); initArchive still runs even if the camera fetch fails.
+      (async () => { try { await initCameras(); } catch (e) {} cameraInitPending = false; initArchive(); })();
+    } else {
+      document.querySelectorAll("button[data-cmd]").forEach((b) => {
+        b.addEventListener("click", () => sendControl(b.dataset.cmd));
+      });
+      document.title = isHistoryPage ? "Fastly Garden Protector — History" : "Fastly Garden Protector — Admin";
+      // On the Pi portal: reveal the cross-page nav and, if the garden has no gadgets
+      // yet, nudge the operator to set them up. Both rely on /api/wizard/state, which is
+      // LAN-only + admin — never reachable from the edge view-only build, so they stay
+      // hidden there even though this same HTML is served by both.
+      initPortalChrome();
+      // CPU/RAM (#pi-health) is auto-wired by gp.js initPiHealth() — no per-page JS.
+      // The admin dashboard gets the same multi-camera gallery + History browser as the
+      // public edge view (the portal proxies /api/cameras|gadget|snapshot|archive/* with
+      // the garden token). The live-MJPEG Gadgets page is unchanged.
+      (async () => { try { await initCameras(); } catch (e) {} cameraInitPending = false; initArchive(); })();
+    }
+
+    // ---- Garden Node setup modal ----
+    // Opened by clicking the node tile while it's offline / never reported (renderNode adds
+    // .clickable then). Available on BOTH tiers — the modal only links to /help (viewer-ok),
+    // so a viewer who spots an offline node can still learn how to set one up.
+    (function initNodeModal() {
+      const tile = $("badge-node"), modal = $("node-modal");
+      if (!tile || !modal) return;
+      const open = () => { modal.classList.add("show"); const c = $("node-modal-close"); if (c) c.focus(); };
+      const close = () => { modal.classList.remove("show"); };
+      tile.addEventListener("click", () => { if (tile.classList.contains("clickable")) open(); });
+      tile.addEventListener("keydown", (e) => {
+        if (tile.classList.contains("clickable") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); open(); }
+      });
+      const closeBtn = $("node-modal-close"); if (closeBtn) closeBtn.addEventListener("click", close);
+      modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && modal.classList.contains("show")) close(); });
+    })();
+
+    async function initPortalChrome() {
+      // NOTE: do NOT set an inline display on #portal-nav here. The nav is already shown by
+      // gp.css (base nav.portal { display:flex }), and an inline style would OVERRIDE the
+      // responsive @media rule that collapses the nav behind the mobile hamburger (gp.js
+      // initNavToggle / gp.css nav.portal ≤600px) — which is exactly what broke the collapsed
+      // nav on the Pi admin portal (this runs only on the !VIEW_ONLY branch, so the edge was fine).
+      try {
+        const st = await (await fetch("/api/wizard/state", { cache: "no-store" })).json();
+        // The garden name is baked into the header server-side (no async pop-in);
+        // this handler only needs the gadget count for the empty-state nudge.
+        const count = (st && st.devices ? st.devices.length : 0);
+        if (count === 0) {
+          $("gp-empty").classList.add("show");
+          const snapCard = $("snapshot-card");
+          if (snapCard) snapCard.style.display = "none";
+          const statusCard = $("status-card");
+          if (statusCard) statusCard.classList.add("full");
+        }
+      } catch (e) { /* state unavailable — leave nav visible, skip the nudge */ }
+    }
+
+
+    // ---------- live camera gallery (edge view-only) ----------
+    // Mirrors the Gadgets page (hardware/devices.html): one tile per camera, its
+    // latest pushed JPEG re-fetched on a timer + an online pill + last-sighting line.
+    const CAM_POLL_MS = 8000;
+    const CAM_OFFLINE_AFTER_S = 150;   // matches the edge's node-liveness threshold
+    let camCards = [];
+    let camTimer = null;
+    let galleryActive = false;   // once the multi-camera gallery takes over, the legacy single-snapshot poll stands down
+    let cameraInitPending = true; // until initCameras() picks single-snapshot vs gallery (gates refreshSnapshot)
+    let controlInFlight = false;  // true while a sendControl request is pending (don't re-enable buttons mid-flight)
+    const camNameById = {};      // device_id -> friendly name (for the History feed labels)
+
+    // Humanise an epoch-ms timestamp into "12s ago" / "3m ago" / "2h ago".
+    function fmtAgoShort(ms) {
+      if (!ms) return "";
+      const s = Math.max(0, Math.round((Date.now() - Number(ms)) / 1000));
+      if (s < 60) return s + "s ago";
+      const m = Math.round(s / 60); if (m < 60) return m + "m ago";
+      const h = Math.round(m / 60); if (h < 24) return h + "h ago";
+      return Math.round(h / 24) + "d ago";
+    }
+
+    async function initCameras() {
+      let cams = [];
+      try {
+        const r = await fetch("/api/cameras", { cache: "no-store" });
+        if (r.ok) { const j = await r.json(); cams = (j && j.cameras) || []; }
+      } catch (e) { return; }                 // endpoint absent (older edge) -> keep single snapshot
+      if (!cams.length) return;               // no cameras -> keep the legacy single-snapshot card
+      if (camTimer) { clearInterval(camTimer); camTimer = null; }   // safe to re-run (e.g. future garden switch)
+      galleryActive = true;                   // stop the legacy single-snapshot poll (the card is now hidden)
+      const single = $("snapshot-card"); if (single) single.style.display = "none";
+      const card = $("cameras-card"); if (card) card.style.display = isHistoryPage ? "none" : "";
+      const host = $("cam-gallery"); host.innerHTML = "";
+      camCards = cams.map((c) => {
+        camNameById[c.device_id] = c.name || c.device_id;
+        const el = document.createElement("div");
+        el.className = "cam-tile";
+        const label = esc(c.name || c.device_id);
+        el.innerHTML =
+          '<div class="cam-frame">' +
+            '<div class="ph">' + GP.svgUse("gp-camera") + ' waiting for a picture…</div>' +
+            '<img alt="Latest picture from ' + label + '">' +
+            '<span class="cam-live"><span class="d"></span>LIVE</span>' +
+          '</div>' +
+          '<div class="cam-body">' +
+            '<div class="cam-name"><span>' + label + '</span><span class="cam-pill" data-pill>checking…</span></div>' +
+            '<div class="cam-event" data-event></div>' +
+          '</div>';
+        const img = el.querySelector("img"), ph = el.querySelector(".ph"), live = el.querySelector(".cam-live");
+        img.addEventListener("load", () => { img.style.display = "block"; ph.style.display = "none"; });
+        img.addEventListener("error", () => { img.style.display = "none"; ph.style.display = "block"; live.classList.remove("show"); });
+        img.addEventListener("click", () => { if (img.src) window.open(img.src, "_blank", "noopener"); });
+        host.appendChild(el);
+        return { did: c.device_id, img, live, pill: el.querySelector("[data-pill]"), event: el.querySelector("[data-event]") };
+      });
+      refreshCameras();
+      camTimer = setInterval(refreshCameras, CAM_POLL_MS);
+    }
+
+    function refreshCameras() {
+      if (document.hidden || !camCards.length || isHistoryPage) return;
+      const ts = Date.now();
+      camCards.forEach((c) => {
+        c.img.src = "/api/snapshot?device=" + encodeURIComponent(c.did) + "&t=" + ts;
+        fetch("/api/gadget?device=" + encodeURIComponent(c.did), { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null)).then((j) => applyCam(c, j)).catch(() => {});
+      });
+    }
+
+    function applyCam(c, j) {
+      const ev = (j && j.event) || null, tel = (j && j.telemetry) || null;
+      // A camera stamps an event on every push; other gadgets report via telemetry.
+      const lastTs = (ev && ev.ts) || (tel && (tel.last_seen_ms || tel.ts)) || 0;
+      const online = lastTs ? (Date.now() - lastTs) / 1000 <= CAM_OFFLINE_AFTER_S : false;
+      if (c.pill) {
+        if (online) { c.pill.textContent = "● online"; c.pill.className = "cam-pill on"; }
+        else if (lastTs) { c.pill.textContent = "last seen " + fmtAgoShort(lastTs); c.pill.className = "cam-pill off"; }
+        else { c.pill.textContent = "no signal yet"; c.pill.className = "cam-pill"; }
+      }
+      if (c.live) c.live.classList.toggle("show", online && c.img.style.display === "block");
+      if (c.event) {
+        let html = "";
+        if (!ev || !ev.ts) html = "";
+        else if (ev.action === "mitigate") html = GP.svgUse("gp-alert", "bad") + " " + esc(ev.species || "intruder") + " — deterrent fired · " + esc(fmtAgoShort(ev.ts));
+        else if (ev.reason === "rain") html = GP.svgUse("gp-rain", "info") + " held off (rain) · " + esc(fmtAgoShort(ev.ts));
+        else if (ev.species && ev.species !== "none") html = GP.svgUse("gp-eye") + " saw " + esc(ev.species) + " · " + esc(fmtAgoShort(ev.ts));
+        else html = GP.svgUse("gp-check", "good") + " all clear · " + esc(fmtAgoShort(ev.ts));
+        // Deep-link to the event detail page (the gadget event carries the archive key).
+        if (html && ev && ev.key) html += ' <a class="cam-detail" href="/event?key=' +
+          encodeURIComponent(ev.key) + (ev.reason ? "&reason=" + encodeURIComponent(ev.reason) : "") + '">details</a>';
+        c.event.innerHTML = html;
+      }
+    }
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshCameras(); });
+
+    // ---------- date-browsable history (edge view-only + Pi admin) ----------
+    // Filter bar (camera / type / sort / date-range) over a merged event set, an in-page
+    // lightbox, and a "Play timelapse" handoff. Formatting + the range fetch/merge live in
+    // GP.archive (shared with the Timelapse page); this file owns the History UI/state.
+    const ARCH_PAGE = 24;       // tiles rendered per "Show more"
+    const ARCH_MAX_DAYS = 14;   // cap on how many days a range merges at once
+    let archDayList = [];       // all days that have photos (newest-first)
+    let archAll = [];           // merged events for the current date range (pre camera/type filter)
+    let archFiltered = [];      // after camera/type filter + sort (what the lightbox walks, flat)
+    let archGroups = [];        // archFiltered folded into multi-angle sets: [{ evs, base }]
+    let archGroupsShown = 0;    // how many group cards currently rendered
+    let archShown = 0;          // how many EVENTS currently rendered (for the summary count)
+    let archCapped = false;     // true when the range held more than ARCH_MAX_DAYS of photos
+    let archLbIndex = 0, archLbReturn = null;   // lightbox cursor + focus to restore on close
+
+    async function initArchive() {
+      // Only the History page shows the archive; on the live dashboard the card stays hidden,
+      // so skip the day-list + per-event + thumbnail fetches entirely — they were pure load
+      // on first paint (several Pi->edge round-trips for a card nobody sees here).
+      if (!isHistoryPage) return;
+      const card = $("archive-card"); if (!card) return;
+      card.style.display = "";
+      initLightbox();
+      const days = await GP.archive.days();
+      if (!days.length) {
+        $("arch-filters").style.display = "none";
+        $("arch-days").innerHTML = ""; $("arch-grid").innerHTML = ""; $("arch-summary").textContent = "";
+        $("arch-note").textContent = "No saved events yet — sightings show up here once a camera captures something.";
+        return;
+      }
+      populateCamSelect();
+      seatArchiveDays(days);
+      const from = $("arch-from"), to = $("arch-to");
+      $("arch-cam").addEventListener("change", applyFilters);
+      $("arch-type").addEventListener("change", applyFilters);
+      $("arch-sort").addEventListener("change", applyFilters);
+      from.addEventListener("change", () => { if (to.value && from.value > to.value) to.value = from.value; loadRange(); });
+      to.addEventListener("change", () => { if (from.value && to.value < from.value) from.value = to.value; loadRange(); });
+      const tlBtn = $("arch-timelapse");
+      tlBtn.innerHTML = GP.svgUse("gp-play") + " Play timelapse";
+      tlBtn.addEventListener("click", () => { location.href = timelapseUrl(); });
+      loadRange();
+    }
+
+    // The camera dropdown starts from the registered roster (friendly names) and is later
+    // augmented with any device ids that appear in the loaded events but aren't registered.
+    function populateCamSelect() {
+      const sel = $("arch-cam");
+      sel.innerHTML = '<option value="">All cameras</option>';
+      Object.keys(camNameById)
+        .sort((a, b) => (camNameById[a] || a).localeCompare(camNameById[b] || b))
+        .forEach((did) => sel.appendChild(new Option(camNameById[did] || did, did)));
+    }
+    function ensureCamOptions(devices) {
+      const sel = $("arch-cam");
+      const have = new Set(Array.from(sel.options).map((o) => o.value));
+      devices.forEach((did) => { if (did && !have.has(did)) { sel.appendChild(new Option(camNameById[did] || did, did)); have.add(did); } });
+    }
+
+    // (Re)seat the day chips + date inputs from a LOCAL-day list (newest-first). Used on first
+    // load and again when the viewer switches the display zone — the day buckets are derived
+    // in that zone (GP.archive groups UTC objects by local day), so they shift with it.
+    function seatArchiveDays(days) {
+      archDayList = days;
+      const from = $("arch-from"), to = $("arch-to");
+      from.min = to.min = days[days.length - 1];     // oldest local day with photos
+      from.max = to.max = days[0];                    // newest local day with photos
+      from.value = to.value = days[0];                // default: newest day only (one fetch)
+      buildDayChips(days);
+    }
+    // Zone changed: re-derive the (cached, no-network) day list in the new zone, re-seat the
+    // chips/inputs, and reload the newest day so tabs + times agree with the header picker.
+    async function rebuildArchiveForZone() {
+      const days = await GP.archive.days();
+      if (!days.length) return;
+      seatArchiveDays(days);
+      loadRange();
+    }
+
+    function buildDayChips(days) {
+      const host = $("arch-days"); host.innerHTML = "";
+      days.forEach((d) => {
+        const b = document.createElement("button");
+        b.className = "arch-chip"; b.dataset.day = d; b.textContent = GP.archive.fmtDay(d);
+        b.addEventListener("click", () => { $("arch-from").value = d; $("arch-to").value = d; loadRange(); });
+        host.appendChild(b);
+      });
+    }
+    function markActiveChip() {
+      const from = $("arch-from").value, to = $("arch-to").value;
+      const single = from && from === to ? from : null;
+      $("arch-days").querySelectorAll(".arch-chip").forEach((c) => c.classList.toggle("active", single !== null && c.dataset.day === single));
+    }
+
+    function archRangeLabel() {
+      const from = $("arch-from").value, to = $("arch-to").value;
+      if (from && to && from === to) return GP.archive.fmtDay(from);
+      if (from && to) return GP.archive.fmtDay(from) + " – " + GP.archive.fmtDay(to);
+      return from ? "since " + GP.archive.fmtDay(from) : to ? "until " + GP.archive.fmtDay(to) : "all dates";
+    }
+
+    // Compose the Timelapse handoff URL from the current filter state (+ optional start key).
+    function timelapseUrl(extra) {
+      const p = new URLSearchParams();
+      const from = $("arch-from").value, to = $("arch-to").value;
+      if (from) p.set("from", from);
+      if (to) p.set("to", to);
+      if ($("arch-cam").value) p.set("cam", $("arch-cam").value);
+      if ($("arch-type").value) p.set("action", $("arch-type").value);
+      if ($("arch-sort").value) p.set("sort", $("arch-sort").value);
+      if (extra && extra.start) p.set("start", extra.start);
+      return "/timelapse?" + p.toString();
+    }
+
+    // Refetch the selected date range (changing dates is the only thing that hits the network;
+    // camera/type/sort re-apply instantly over the already-merged set).
+    async function loadRange() {
+      $("arch-grid").innerHTML = ""; $("arch-note").textContent = ""; $("arch-summary").textContent = "Loading…";
+      const from = $("arch-from").value || null, to = $("arch-to").value || null;
+      const res = await GP.archive.fetchRange({ from, to, maxDays: ARCH_MAX_DAYS, days: archDayList });
+      archAll = res.events; archCapped = res.capped;
+      ensureCamOptions(Array.from(new Set(archAll.map((e) => e.device))));
+      markActiveChip();
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const cam = $("arch-cam").value, type = $("arch-type").value, asc = $("arch-sort").value === "oldest";
+      let evs = archAll.slice();
+      if (cam) evs = evs.filter((e) => e.device === cam);
+      if (type) evs = evs.filter((e) => GP.archive.type(e) === type);
+      evs.sort((a, b) => { const ka = GP.archive.stamp(a), kb = GP.archive.stamp(b); return asc ? (ka < kb ? -1 : ka > kb ? 1 : 0) : (ka > kb ? -1 : ka < kb ? 1 : 0); });
+      archFiltered = evs;
+      buildGroups();
+      renderTiles(true);
+      updateSummary();
+    }
+
+    // A frame belongs to a multi-angle set iff it carries a real (non-"none") batch id —
+    // the shared id the Pi stamps on every camera it pushes in one tick. Legacy frames and
+    // night-motion detections have no batch and stay standalone.
+    function archBatchKey(ev) { return ev && ev.batch && ev.batch !== "none" ? ev.batch : ""; }
+
+    // Fold the flat (already-sorted) archFiltered into render groups: runs of adjacent
+    // frames sharing a batch id collapse into one set; everything else is a group of one.
+    // `base` is the group's start index INTO archFiltered, so a thumbnail maps straight to
+    // the lightbox cursor without a second lookup. Same-batch frames are adjacent because
+    // they share a capture second (sort key), so a single linear pass suffices.
+    function buildGroups() {
+      archGroups = [];
+      let i = 0;
+      while (i < archFiltered.length) {
+        const b = archBatchKey(archFiltered[i]);
+        let j = i + 1;
+        if (b) { while (j < archFiltered.length && archBatchKey(archFiltered[j]) === b) j++; }
+        archGroups.push({ evs: archFiltered.slice(i, j), base: i });
+        i = j;
+      }
+    }
+
+    function renderTiles(reset) {
+      const grid = $("arch-grid");
+      if (reset) { grid.innerHTML = ""; archGroupsShown = 0; archShown = 0; }
+      archGroups.slice(archGroupsShown, archGroupsShown + ARCH_PAGE).forEach((g) => {
+        if (g.evs.length > 1) renderArchSet(grid, g);
+        else renderArchTile(grid, g.evs[0], g.base);
+        archGroupsShown++; archShown += g.evs.length;
+      });
+    }
+
+    function renderArchTile(grid, ev, index) {
+      const cam = camNameById[ev.device] || ev.device;
+      const cap = GP.archive.caption(ev);
+      const el = document.createElement("div");
+      el.className = "arch-tile";
+      el.tabIndex = 0; el.setAttribute("role", "button"); el.setAttribute("aria-label", cap + " — open");
+      el.innerHTML =
+        '<div class="fr"><img loading="lazy" alt="' + esc(cap) + '"></div>' +
+        '<div class="cap"><div class="a ' + esc(GP.archive.type(ev)) + '">' + GP.archive.icon(ev) + ' ' + esc(cap) + '</div>' +
+        '<div class="t">' + esc(GP.archive.localTime(ev)) + ' · ' + esc(cam) + '</div></div>';
+      el.querySelector("img").src = GP.archive.imageUrl(ev.key);
+      el.addEventListener("click", () => openLightbox(index));
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLightbox(index); } });
+      grid.appendChild(el);
+    }
+
+    // A multi-angle set: one card, a thumbnail per camera from the same capture tick. The
+    // headline (caption/icon/time) prefers the most salient angle (sprayed > sighting >
+    // clear) so a set isn't summarized as "all clear" when one camera caught something.
+    // Each thumbnail opens its own frame in the lightbox (base + offset into archFiltered).
+    function renderArchSet(grid, g) {
+      const evs = g.evs;
+      const headline = evs.find((e) => GP.archive.type(e) === "sprayed")
+        || evs.find((e) => GP.archive.type(e) === "sighting") || evs[0];
+      const cap = GP.archive.caption(headline);
+      const el = document.createElement("div");
+      el.className = "arch-tile arch-set";
+      const thumbs = evs.map((ev, k) => {
+        const cam = camNameById[ev.device] || ev.device;
+        return '<button class="arch-set-thumb" type="button" data-i="' + (g.base + k) + '" ' +
+          'aria-label="' + esc(cap + " — " + cam) + '">' +
+          '<img loading="lazy" alt="' + esc(cam) + '" src="' + esc(GP.archive.imageUrl(ev.key)) + '">' +
+          '<span class="arch-set-cam">' + esc(cam) + '</span></button>';
+      }).join("");
+      el.innerHTML =
+        '<div class="arch-set-fr">' + thumbs + '</div>' +
+        '<div class="cap"><div class="a ' + esc(GP.archive.type(headline)) + '">' + GP.archive.icon(headline) + ' ' + esc(cap) + '</div>' +
+        '<div class="t">' + esc(GP.archive.localTime(headline)) + ' · ' + evs.length + ' angles</div></div>';
+      el.querySelectorAll(".arch-set-thumb").forEach((btn) => {
+        btn.addEventListener("click", () => openLightbox(Number(btn.dataset.i)));
+      });
+      grid.appendChild(el);
+    }
+
+    function updateSummary() {
+      const note = $("arch-note"); note.innerHTML = "";
+      const total = archFiltered.length;
+      const camSel = $("arch-cam"), typeSel = $("arch-type");
+      const camLabel = camSel.value ? (camNameById[camSel.value] || camSel.value) : "all cameras";
+      const typeLabel = typeSel.value ? typeSel.options[typeSel.selectedIndex].text.toLowerCase() : "all types";
+      if (!total) {
+        $("arch-summary").textContent = "Nothing matches — " + archRangeLabel() + " · " + camLabel + " · " + typeLabel + ".";
+        if (camSel.value || typeSel.value) note.textContent = "Try All cameras / All types, or widen the date range.";
+        else if (archCapped) note.textContent = "Showing the newest " + ARCH_MAX_DAYS + " days with photos — narrow the range for older days.";
+        return;
+      }
+      $("arch-summary").textContent = "Showing " + Math.min(archShown, total) + " of " + total +
+        " · " + archRangeLabel() + " · " + camLabel + " · " + typeLabel;
+      if (archShown < total) {
+        const btn = document.createElement("button");
+        btn.className = "arch-more"; btn.textContent = "Show more (" + (total - archShown) + ")";
+        btn.addEventListener("click", () => { renderTiles(false); updateSummary(); });
+        note.appendChild(btn);
+      }
+      if (archCapped) {
+        const cap = document.createElement("span");
+        cap.style.marginLeft = "10px";
+        cap.textContent = "Newest " + ARCH_MAX_DAYS + " days shown — narrow the range for older days.";
+        note.appendChild(cap);
+      }
+    }
+
+    // ---- lightbox (walks archFiltered; ←/→/Esc; "open original" + "timelapse from here") ----
+    function initLightbox() {
+      $("arch-lb-close").innerHTML = GP.svgUse("gp-x");
+      $("arch-lb-prev").innerHTML = GP.svgUse("gp-step");
+      $("arch-lb-next").innerHTML = GP.svgUse("gp-step");
+      $("arch-lb-close").addEventListener("click", closeLightbox);
+      $("arch-lb-prev").addEventListener("click", () => lbStep(-1));
+      $("arch-lb-next").addEventListener("click", () => lbStep(1));
+      $("arch-lightbox").addEventListener("click", (e) => { if (e.target.id === "arch-lightbox") closeLightbox(); });
+    }
+    function renderLb() {
+      const ev = archFiltered[archLbIndex]; if (!ev) return;
+      const cam = camNameById[ev.device] || ev.device, cap = GP.archive.caption(ev);
+      const img = $("arch-lb-img"); img.src = GP.archive.imageUrl(ev.key); img.alt = cap;
+      const a = $("arch-lb-a"); a.className = "a " + GP.archive.type(ev); a.innerHTML = GP.archive.icon(ev) + " " + esc(cap);
+      $("arch-lb-t").textContent = GP.archive.localTime(ev) + " · " + cam;
+      const det = $("arch-lb-detail"); det.href = "/event?key=" + encodeURIComponent(ev.key); det.innerHTML = GP.svgUse("gp-info") + " view details";
+      const open = $("arch-lb-open"); open.href = GP.archive.imageUrl(ev.key); open.innerHTML = GP.svgUse("gp-search") + " open original";
+      const tl = $("arch-lb-tl"); tl.href = timelapseUrl({ start: ev.key }); tl.innerHTML = GP.svgUse("gp-play", "brand") + " timelapse from here";
+      $("arch-lb-prev").disabled = archLbIndex <= 0;
+      $("arch-lb-next").disabled = archLbIndex >= archFiltered.length - 1;
+    }
+    function openLightbox(i) {
+      archLbIndex = i; archLbReturn = document.activeElement;
+      renderLb();
+      $("arch-lightbox").classList.add("show");
+      document.addEventListener("keydown", lbKey);
+    }
+    function closeLightbox() {
+      $("arch-lightbox").classList.remove("show");
+      document.removeEventListener("keydown", lbKey);
+      try { if (archLbReturn && archLbReturn.focus) archLbReturn.focus(); } catch (e) {}
+    }
+    function lbStep(d) {
+      const n = archLbIndex + d;
+      if (n < 0 || n >= archFiltered.length) return;
+      archLbIndex = n; renderLb();
+    }
+    function lbKey(e) {
+      if (e.key === "Escape") closeLightbox();
+      else if (e.key === "ArrowLeft") lbStep(-1);
+      else if (e.key === "ArrowRight") lbStep(1);
+    }
+
+    // Live state via the shared feed (SSE on the Pi, polling on the edge). History pages
+    // show no live state, so they don't subscribe.
+    if (!isHistoryPage) {
+      GP.subscribeState(onStateSnapshot);
+      // Connectivity watchdog: the feed delivers a snapshot/heartbeat at least every ~10s
+      // (Pi SSE) or every 5s (edge poll), so >20s of silence means the link is down.
+      setInterval(function () {
+        if (lastStateAt && Date.now() - lastStateAt > 20000) setConn(false);
+      }, 5000);
+    }
+
+    // Re-render absolute times when the viewer switches the display timezone (header picker).
+    document.addEventListener("gp:tzchange", function () {
+      // On History the day buckets themselves are zone-derived, so rebuild the tabs + reload
+      // (which re-renders every tile's time too). Off History, just repaint the live state.
+      if (isHistoryPage) {
+        rebuildArchiveForZone();
+      } else if (latestState) renderState(latestState);
+    });
+  </script>
+</body>
+</html>

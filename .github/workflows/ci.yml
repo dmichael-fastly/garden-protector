@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # gitleaks needs full history
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      # Restore + save are split (not the combined actions/cache) so the save runs
+      # on FAILURE too (if: always()). A red run still compiles the heavy tract/ONNX
+      # crates — without this, a failing run discards them and the next run pays the
+      # full ~12-min cold compile again. Warming the cache on every run breaks that loop.
+      #
+      # The key rolls per run (…-<run_id>) with a prefix restore-key, so every run
+      # restores the most recent matching cache and then saves an UPDATED snapshot.
+      # A fixed Cargo.lock key can't do this: keys are immutable, so once saved it
+      # would never pick up newly-compiled artifacts (e.g. the debug-profile deps that
+      # `make test-rust` now builds, which differ from the release deps build-check
+      # compiles). GitHub evicts old entries at 10 GB / 7 days idle.
+      - name: Restore Rust build cache
+        id: cache-rust
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-
+
+      - name: Install Python dependencies
+        # `make ci` runs pytest, which needs the runtime deps + the test-only deps
+        # (pytest/responses/hypothesis, kept out of the Pi runtime set — see PI-002)
+        # + the provision control-plane deps the provision tests import. All pinned
+        # via constraints.txt (the Python Cargo.lock).
+        run: |
+          pip install -c constraints.txt \
+            -r hardware/requirements.txt \
+            -r hardware/requirements-dev.txt \
+            -r provision/requirements.txt
+
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=8.30.1  # >=8.19 for the `gitleaks git` subcommand (Makefile `scan`)
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Run make ci
+        run: make ci
+
+      # Save even on failure (if: always()). The per-run key is always new, so this
+      # never collides with an existing entry — each run persists an updated snapshot.
+      - name: Save Rust build cache
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}-${{ github.run_id }}

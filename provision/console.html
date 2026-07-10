@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Control Plane</title>
+  <!-- Fastly favicon (served from repo-root favicon.ico at /favicon.ico) -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    /* box-sizing + body type + base reset + buttons/inputs/selects/tables come from
+       gp.css (shared primitives) and DaisyUI (app.css). Only this page's BESPOKE,
+       JS-coupled components live here, modernized on the shared tokens/radii/shadows. */
+    code, .mono { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; }
+
+    /* Header bar (grid, brand, h1.site, .leaf, .head-right, .conn, .theme-toggle)
+       provided by gp.css + header.bare. The deployment-mode pill is bespoke: JS sets
+       className = "pill " + (mock|live), so keep the names and reskin as a soft chip. */
+    .pill { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: var(--radius-pill);
+            font-weight: 700; font-size: 11px; letter-spacing: .4px; border: 1px solid transparent; }
+    .pill.mock { background: var(--color-warning); color: var(--color-warning-content); border-color: var(--color-warning); }
+    .pill.live { background: var(--color-success); color: var(--color-success-content); border-color: var(--color-success); }
+
+    /* Toolbar: a raised utility bar under the header. */
+    .toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 24px;
+               border-bottom: 1px solid var(--hairline); background: var(--panel); flex-wrap: wrap; }
+    .toolbar label { font-size: 12px; color: var(--muted); font-weight: 600;
+                     text-transform: uppercase; letter-spacing: .5px; }
+    .grow { flex: 1; }
+
+    main { max-width: var(--page-wide); margin: 0 auto; padding: 24px; display: grid;
+           grid-template-columns: 360px 1fr; gap: 24px; align-items: start; }
+    @media (max-width: 880px) { main { grid-template-columns: 1fr; } }
+    /* .card + .card h2 come from gp.css; extend the heading to a flex row for the inline action. */
+    .card h2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+    /* Garden list item — a selectable bespoke card. */
+    .garden { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px;
+              cursor: pointer; background: var(--panel-2); box-shadow: var(--shadow-1);
+              transition: border-color .12s ease, box-shadow .12s ease, transform .05s ease; }
+    .garden:hover { border-color: color-mix(in srgb, var(--brand) 45%, var(--hairline)); box-shadow: var(--shadow-2); }
+    .garden.sel { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand) inset, var(--shadow-1); }
+    .garden .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .garden .name { font-weight: 700; }
+    .garden .gid { font-size: 11px; color: var(--muted); }
+    .garden .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* Bespoke status chip used in the garden list + tiles (JS sets className = "badge " + state).
+       Distinct from gp.css's .badge metric tile — this page's inline def wins for this small chip. */
+    .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: var(--radius-pill);
+             font-size: 11px; font-weight: 700; border: 1px solid var(--hairline); background: var(--panel-3);
+             color: var(--muted); }
+    .badge.armed { color: var(--green-ink); border-color: color-mix(in srgb, var(--green) 55%, var(--hairline)); }
+    .badge.disarmed { color: var(--red-ink); border-color: color-mix(in srgb, var(--red) 55%, var(--hairline)); }
+    .badge.stopped { color: var(--amber-ink); border-color: color-mix(in srgb, var(--amber) 55%, var(--hairline)); }
+    .badge.default { color: var(--muted); }
+    .badge.online { color: var(--green-ink); } .badge.offline { color: var(--red-ink); }
+
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 10px; margin-bottom: 18px; }
+    .tile { background: var(--panel-2); border: 1px solid var(--hairline); border-radius: var(--radius-sm);
+            padding: 12px 14px; box-shadow: var(--shadow-1); }
+    .tile .l { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+    .tile .v { font-size: 18px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+    /* Camera gallery — one tile per camera device, scales to N. */
+    .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .cam { background: var(--panel-2); border: 1px solid var(--hairline); border-radius: var(--radius-md);
+           overflow: hidden; box-shadow: var(--shadow-1); }
+    .cam-imgwrap { position: relative; aspect-ratio: 4 / 3; background: var(--code-bg);
+                   display: flex; align-items: center; justify-content: center; }
+    .cam-imgwrap img { width: 100%; height: 100%; object-fit: contain; display: none; }
+    .cam-ph { color: var(--muted); font-size: 12px; }
+    .cam-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 12px 2px; }
+    .cam-name { font-weight: 700; font-size: 13px; }
+    .cam-type { font-size: 11px; color: var(--muted); }
+    .cam-meta { padding: 0 12px 12px; font-size: 12px; color: var(--muted); }
+    .cam-act { font-weight: 700; }
+    .cam-act.mitigate { color: var(--red-ink); } .cam-act.none { color: var(--green-ink); }
+
+    /* Device-table accents (DaisyUI .table owns the base table styling). */
+    td .type { color: var(--muted); font-size: 12px; }
+    .kind-observer { color: var(--blue-ink); font-weight: 600; }
+    .kind-deterrent { color: var(--amber-ink); font-weight: 600; }
+
+    .controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 6px 0 4px; }
+    @media (max-width: 520px) { .controls { grid-template-columns: 1fr 1fr; } }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 12px; }
+    .empty { text-align: center; color: var(--muted); padding: 36px 12px; }
+
+    /* Modal — bespoke scrolling overlay (NOT gp.css .modal: this one top-aligns + can be wide). */
+    .overlay { position: fixed; inset: 0; background: var(--scrim-strong); display: none;
+               align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; }
+    .overlay.show { display: flex; }
+    .modal { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-lg);
+             width: 100%; max-width: 620px; padding: 24px; box-shadow: var(--shadow-overlay); }
+    .modal.wide { max-width: 900px; }
+
+    /* Cost calculator */
+    .cost-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 4px 0 18px; }
+    .cost-hero .tile .v.big { font-size: 24px; }
+    .cost-hero .tile .sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .cost-hero .tile.total { border-color: var(--green); background: var(--green-dim);
+                             color: var(--green-ink); }
+    table.cost td.num, table.cost th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    table.cost td.unavail { color: var(--muted); font-style: italic; }
+    .est-tag { font-size: 10px; color: var(--amber-ink); border: 1px solid var(--amber); border-radius: 5px;
+               padding: 0 5px; margin-left: 6px; vertical-align: middle; }
+    .rates { margin-top: 10px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+    .rates summary { cursor: pointer; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+    .rates .rgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px; margin: 14px 0 10px; }
+    .rates .rgrid label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .rates .rgrid input { width: 100%; }
+    .modal h3 { margin: 0 0 4px; font-size: 18px; font-weight: 700; }
+    .modal .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; line-height: 1.5; }
+    .field { margin-bottom: 14px; }
+    .field > label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+    .field input[type=text], .field select { width: 100%; }
+    .field.check { display: flex; align-items: center; gap: 8px; }
+    .field.check > label { margin: 0; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+    .log { background: var(--code-bg); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 12px;
+           font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.55;
+           max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; margin-top: 8px; display: none; }
+    .log.show { display: block; }
+    .log .l-cmd { color: var(--blue-ink); } .log .l-info { color: var(--text); }
+    .log .l-warn { color: var(--amber-ink); } .log .l-error { color: var(--red-ink); }
+    .log .l-ok { color: var(--green-ink); font-weight: 700; }
+    .runstate { display: none; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+    .runstate.show { display: flex; }
+    .spin { width: 14px; height: 14px; border: 2px solid var(--hairline); border-top-color: var(--brand);
+            border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .deploybox { background: var(--panel-2); border: 1px solid color-mix(in srgb, var(--green) 45%, var(--hairline));
+                 border-radius: var(--radius-sm); padding: 12px; margin-top: 12px; display: none; }
+    .deploybox.show { display: block; }
+    .deploybox pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
+
+    /* Bespoke toast: this page adds an .ok variant beyond gp.css's .error. */
+    .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+             background: var(--panel-2); border: 1px solid var(--hairline); padding: 11px 18px;
+             border-radius: var(--radius-sm); font-size: 14px; box-shadow: var(--shadow-2);
+             opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 80; }
+    .toast.show { opacity: 1; } .toast.error { border-color: var(--red); } .toast.ok { border-color: var(--green); }
+  </style>
+</head>
+<body>
+  <header class="bare">
+    <div class="hd-brand">
+      <h1 class="site"><a href="/"><span class="leaf"><svg class="gp-ic brand"><use href="#gp-leaf"/></svg></span> Fastly Garden Protector</a> <span style="color:var(--muted);font-weight:400">· Control Plane</span></h1>
+    </div>
+    <div class="head-right">
+      <span id="mode-pill" class="pill live">LIVE</span>
+      <span id="edge-label" class="mono"></span>
+      <span id="conn" class="conn"><span class="dot"></span><span id="conn-text">edge?</span></span>
+      <select id="tz-select" class="tz-select" aria-label="Display timezone"></select>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch theme"></button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <label for="svc">Deployment</label>
+    <select id="svc" class="select select-sm"></select>
+    <button id="btn-refresh" class="btn btn-ghost btn-sm" title="Refresh"><svg class="gp-ic"><use href="#gp-refresh"/></svg> Refresh</button>
+    <span class="grow"></span>
+    <button id="btn-cost" class="btn btn-ghost btn-sm">Costs…</button>
+    <button id="btn-logs" class="btn btn-ghost btn-sm">Logs…</button>
+    <button id="btn-provision" class="btn btn-primary btn-sm"><svg class="gp-ic"><use href="#gp-plus"/></svg> New Deployment</button>
+    <button id="btn-teardown" class="btn btn-ghost btn-sm text-error">Teardown…</button>
+  </div>
+
+  <main>
+    <section class="card">
+      <h2>Gardens <button id="btn-add-garden" class="btn btn-success btn-sm"><svg class="gp-ic"><use href="#gp-plus"/></svg> Add</button></h2>
+      <div id="gardens"></div>
+    </section>
+
+    <section class="card" id="detail">
+      <div class="empty">Select a garden to view devices and controls.</div>
+    </section>
+  </main>
+
+  <!-- Generic modal shell -->
+  <div id="overlay" class="overlay">
+    <div class="modal" id="modal"></div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    // A 401 means the session expired (or the console now requires a passcode) — bounce
+    // to "/", which serves the sign-in page. Guard against reload loops.
+    let _authReloading = false;
+    function authRedirect(status) {
+      if (status === 401 && !_authReloading) { _authReloading = true; location.reload(); return true; }
+      return false;
+    }
+    const api = {
+      async get(path) { const r = await fetch(path, { cache: "no-store" }); if (r.status === 401) { authRedirect(401); } if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); },
+      async post(path, body) { const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); authRedirect(r.status); return r; },
+    };
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+    // Currency / count / size formatters.
+    function fmtUSD(n) {
+      n = Number(n) || 0;
+      if (n >= 1000) return "$" + n.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      if (n >= 1) return "$" + n.toFixed(2);
+      return "$" + n.toFixed(4);
+    }
+    function fmtN(n) {
+      n = Number(n) || 0;
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+      return Math.round(n).toLocaleString();
+    }
+    function fmtGB(bytes) {
+      const gb = (Number(bytes) || 0) / (1024 ** 3);
+      if (gb >= 1) return gb.toFixed(2) + " GB";
+      const mb = (Number(bytes) || 0) / (1024 ** 2);
+      if (mb >= 1) return mb.toFixed(1) + " MB";
+      return ((Number(bytes) || 0) / 1024).toFixed(0) + " KB";
+    }
+
+    let INFO = { mock: false, edge: "", services: [], taxonomy: { kinds: [], observer_types: [], deterrent_types: [] } };
+    let SERVICE = null;       // selected service_id
+    let OVERVIEW = null;      // {gardens:[...]}
+    let SELECTED = null;      // selected garden_id
+    let statePoll = null;
+
+    function toast(msg, kind) {
+      const t = $("toast"); t.textContent = msg;
+      t.className = "toast show" + (kind ? " " + kind : "");
+      clearTimeout(toast._t); toast._t = setTimeout(() => (t.className = "toast"), 2800);
+    }
+    function setConn(ok, label) {
+      const c = $("conn"); c.className = "conn " + (ok ? "online" : "offline");
+      $("conn-text").textContent = label || (ok ? "edge online" : "edge offline");
+    }
+
+    // ---------- bootstrap ----------
+    async function loadInfo() {
+      INFO = await api.get("/api/console/info");
+      $("mode-pill").className = "pill " + (INFO.mock ? "mock" : "live");
+      $("mode-pill").textContent = INFO.mock ? "MOCK MODE" : "LIVE";
+      $("edge-label").textContent = INFO.edge || "(no edge)";
+      const sel = $("svc"); sel.innerHTML = "";
+      if (!INFO.services.length) {
+        sel.innerHTML = '<option value="">— no deployments —</option>';
+      } else {
+        INFO.services.forEach((s) => {
+          const o = document.createElement("option");
+          o.value = s.service_id;
+          o.textContent = (s.service_name || s.service_id) + (s.has_archive ? " · archive" : "");
+          sel.appendChild(o);
+        });
+      }
+      if (INFO.services.length && !SERVICE) SERVICE = INFO.services[0].service_id;
+      if (SERVICE) sel.value = SERVICE;
+    }
+
+    async function loadOverview() {
+      if (!SERVICE) { OVERVIEW = null; renderGardens(); renderDetail(); return; }
+      try { OVERVIEW = await api.get("/api/console/overview?service_id=" + encodeURIComponent(SERVICE)); }
+      catch (e) { OVERVIEW = { gardens: [] }; }
+      if (SELECTED && !OVERVIEW.gardens.some((g) => g.garden_id === SELECTED)) SELECTED = null;
+      if (!SELECTED && OVERVIEW.gardens.length) {
+        // Prefer the default ("Home") garden on first load — it always has live edge
+        // state, so the overview opens on a populated view rather than a cold one.
+        const def = OVERVIEW.gardens.find((g) => g.garden_id === "default");
+        SELECTED = def ? def.garden_id : OVERVIEW.gardens[0].garden_id;
+      }
+      renderGardens(); renderDetail(); refreshState();
+    }
+
+    // ---------- render: gardens list ----------
+    function renderGardens() {
+      const host = $("gardens");
+      if (!OVERVIEW || !OVERVIEW.gardens.length) {
+        host.innerHTML = '<div class="empty">No gardens yet.<br/>Use <b>+ Add</b> to register your first device.</div>';
+        return;
+      }
+      host.innerHTML = "";
+      OVERVIEW.gardens.forEach((g) => {
+        const el = document.createElement("div");
+        el.className = "garden" + (g.garden_id === SELECTED ? " sel" : "");
+        el.dataset.gid = g.garden_id;
+        const isDefault = g.garden_id === "default";
+        el.innerHTML =
+          '<div class="row"><span class="name">' + esc(g.name || g.garden_id) + "</span>" +
+          '<span class="badge ' + (isDefault ? "default" : "") + '" data-armed></span></div>' +
+          '<div class="gid mono">' + esc(g.garden_id) + (isDefault ? " · tokenless" : "") + "</div>" +
+          '<div class="meta">' + g.device_count + " device" + (g.device_count === 1 ? "" : "s") +
+          " · " + esc(g.tz || "") + "</div>";
+        el.addEventListener("click", () => { SELECTED = g.garden_id; renderGardens(); renderDetail(); refreshState(); });
+        host.appendChild(el);
+      });
+    }
+
+    // ---------- render: garden detail ----------
+    // Build the two canonical .gp-pill badges (protection + mitigation) for the detail heading.
+    // Mirrors the header pill STATE-SPECIFIC icon convention in gp.js/gp.css.
+    function ic(name) { return '<svg class="gp-ic" aria-hidden="true"><use href="#' + name + '"/></svg>'; }
+    function detailPills(st) {
+      const armed = st && st.armed;
+      const cont = st && st.continue_mitigation;
+      const stop = st && st.override_stop;
+      let protPill;
+      if (armed === true)       protPill = '<span class="gp-pill armed">'   + ic("gp-shield") + ' Armed</span>';
+      else if (armed === false)  protPill = '<span class="gp-pill disarmed">' + ic("gp-power")  + ' Off</span>';
+      else                       protPill = '<span class="gp-pill off">'      + ic("gp-power")  + ' —</span>';
+      let mitPill;
+      if (cont)                  mitPill = '<span class="gp-pill active">'  + ic("gp-spray") + ' Spraying</span>';
+      else if (stop)             mitPill = '<span class="gp-pill stopped">' + ic("gp-stop")  + ' Stopped</span>';
+      else if (armed)            mitPill = '<span class="gp-pill armed">'   + ic("gp-shield")+ ' Standby</span>';
+      else                       mitPill = '<span class="gp-pill off">'     + ic("gp-power") + ' —</span>';
+      return '<span id="detail-pills" style="display:inline-flex;gap:6px;vertical-align:middle;margin-left:10px">' + protPill + mitPill + '</span>';
+    }
+
+    function renderDetail() {
+      const host = $("detail");
+      const g = OVERVIEW && OVERVIEW.gardens.find((x) => x.garden_id === SELECTED);
+      if (!g) { host.innerHTML = '<div class="empty">Select a garden to view devices and controls.</div>'; return; }
+      const rows = (g.devices || []).map((d) =>
+        "<tr><td class='mono'>" + esc(d.device_id) + "</td>" +
+        "<td><span class='kind-" + esc(d.kind) + "'>" + esc(d.kind) + "</span><div class='type'>" + esc(d.type) + "</div></td>" +
+        "<td class='mono'>" + esc(d.node_id) + "</td>" +
+        "<td>" + esc(d.status || "active") + "</td></tr>").join("");
+      host.innerHTML =
+        '<h2>' + esc(g.name || g.garden_id) + detailPills(null) +
+        '<span style="display:inline-flex;gap:8px"><button class="btn btn-success btn-sm" id="d-add">' + ic("gp-plus") + ' Device</button> ' +
+        (g.garden_id === "default" ? "" : '<button class="btn btn-ghost btn-sm text-warning" id="d-rotate">Rotate token</button>') + "</span></h2>" +
+        '<div class="tiles" id="state-tiles"></div>' +
+        '<div id="cam-section" style="display:none"><h2 style="margin:18px 0 12px">Cameras</h2>' +
+        '<div class="gallery" id="camera-gallery"></div></div>' +
+        '<div class="controls">' +
+        '<button class="btn btn-success btn-block" data-cmd="arm">Arm</button>' +
+        '<button class="btn btn-error btn-block" data-cmd="disarm">Disarm</button>' +
+        '<button class="btn btn-warning btn-block" data-cmd="stop">Stop</button>' +
+        '<button class="btn btn-info btn-block" data-cmd="resume">Resume</button></div>' +
+        '<div class="hint">Controls write to the edge and take effect on the gateway/Pi within ~3&nbsp;s.</div>' +
+        '<h2 style="margin-top:20px">Devices</h2>' +
+        (rows ? '<table class="table table-zebra table-sm"><thead><tr><th>Device</th><th>Kind</th><th>Node</th><th>Status</th></tr></thead><tbody>' + rows + "</tbody></table>"
+              : '<div class="empty">No devices in this garden yet.</div>');
+
+      host.querySelectorAll("button[data-cmd]").forEach((b) =>
+        b.addEventListener("click", () => sendControl(g.garden_id, b.dataset.cmd)));
+      const add = $("d-add"); if (add) add.addEventListener("click", () => openRegisterModal(g.garden_id));
+      const rot = $("d-rotate"); if (rot) rot.addEventListener("click", () => openRotateModal(g.garden_id));
+      renderStateTiles(null);
+      renderGallery(g);
+    }
+
+    function renderStateTiles(st) {
+      const host = $("state-tiles"); if (!host) return;
+      const armed = st && st.armed, stop = st && st.override_stop;
+      const cont = st && st.continue_mitigation;
+      const node = st && st.node;
+
+      // Update the pill pair in the detail heading (uses the shared .gp-pill component).
+      const pillHost = $("detail-pills");
+      if (pillHost) {
+        const tmp = document.createElement("span");
+        tmp.innerHTML = detailPills(st);
+        const newPills = tmp.firstElementChild;
+        pillHost.replaceWith(newPills);
+      }
+
+      // Garden-card armed badge: friendly title-case so list + detail match.
+      const cardBadge = document.querySelector('.garden[data-gid="' + SELECTED + '"] [data-armed]');
+      if (cardBadge && SELECTED !== "default") {
+        cardBadge.textContent = armed === true ? "Armed" : armed === false ? "Off" : "";
+        cardBadge.className = "badge " + (armed ? "armed" : armed === false ? "disarmed" : "");
+      } else if (cardBadge) { cardBadge.textContent = "default"; }
+
+      // Telemetry tiles (numeric readings — kept as .tile, not pills).
+      const tiles = [];
+      if (node) tiles.push(["Garden node", node.online ? "ONLINE" : "OFFLINE", node.online ? "var(--green)" : "var(--red)"]);
+      const t = node && node.telemetry;
+      if (t) {
+        if (t.temperature_c != null) tiles.push(["Temp", Number(t.temperature_c).toFixed(1) + " °C", "var(--text)"]);
+        if (t.battery_voltage != null) tiles.push(["Battery", Number(t.battery_voltage).toFixed(2) + " V", "var(--text)"]);
+        if (t.raining != null) tiles.push(["Rain", t.raining ? "RAINING" : "Dry", t.raining ? "var(--blue)" : "var(--text)"]);
+      }
+      host.innerHTML = tiles.map((x) =>
+        '<div class="tile"><div class="l">' + x[0] + '</div><div class="v" style="color:' + x[2] + '">' + esc(x[1]) + "</div></div>").join("");
+    }
+
+    // ---------- render: camera gallery (per-device snapshots) ----------
+    // One tile per camera device (type camera_*). The snapshot + event/telemetry are
+    // proxied by the console (which attaches the per-garden token server-side), so the
+    // token never reaches the browser. Scales to N cameras.
+    function cameraDevicesOf(g) {
+      return ((g && g.devices) || []).filter((d) => String(d.type || "").startsWith("camera_"));
+    }
+
+    function fmtAgo(ms) {
+      const s = Math.floor((Date.now() - Number(ms)) / 1000);
+      if (!isFinite(s) || s < 0) return "";
+      if (s < 60) return s + "s ago";
+      const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+      const h = Math.floor(m / 60); return h + "h ago";
+    }
+
+    function renderGallery(g) {
+      const sec = $("cam-section"), host = $("camera-gallery");
+      if (!sec || !host) return;
+      const cams = cameraDevicesOf(g);
+      if (!cams.length) { sec.style.display = "none"; host.innerHTML = ""; return; }
+      sec.style.display = "";
+      host.innerHTML = cams.map((d) =>
+        '<div class="cam" data-did="' + esc(d.device_id) + '">' +
+          '<div class="cam-imgwrap"><span class="cam-ph">no image yet</span>' +
+          '<img alt="' + esc(d.device_id) + ' snapshot" /></div>' +
+          '<div class="cam-h"><span class="cam-name">' + esc(d.name || d.device_id) + '</span>' +
+          '<span class="cam-type mono">' + esc(d.type) + '</span></div>' +
+          '<div class="cam-meta" data-meta>…</div>' +
+        '</div>').join("");
+      refreshGallery(g);
+    }
+
+    function updateCamMeta(card, j) {
+      const el = card.querySelector("[data-meta]"); if (!el) return;
+      const ev = j && j.event;
+      if (!ev || typeof ev !== "object") { el.textContent = "no frames yet"; return; }
+      const action = ev.action != null ? String(ev.action) : "—";
+      const sp = ev.species != null ? String(ev.species) : "—";
+      const conf = ev.confidence != null ? " " + (Number(ev.confidence) * 100).toFixed(0) + "%" : "";
+      const why = ev.reason ? " · held: " + ev.reason : "";
+      const ago = ev.ts ? " · " + fmtAgo(ev.ts) : "";
+      el.innerHTML = '<span class="cam-act ' + esc(action) + '">' + esc(action) + "</span> " +
+        esc(sp) + esc(conf) + esc(why) + esc(ago);
+    }
+
+    function refreshGallery(g) {
+      g = g || (OVERVIEW && OVERVIEW.gardens.find((x) => x.garden_id === SELECTED));
+      const host = $("camera-gallery"); if (!host || !g) return;
+      cameraDevicesOf(g).forEach((d) => {
+        const card = host.querySelector('.cam[data-did="' + d.device_id + '"]'); if (!card) return;
+        const img = card.querySelector("img"), ph = card.querySelector(".cam-ph");
+        const base = "garden=" + encodeURIComponent(g.garden_id) + "&device=" + encodeURIComponent(d.device_id);
+        const probe = new Image();
+        probe.onload = () => { img.src = probe.src; img.style.display = "block"; if (ph) ph.style.display = "none"; };
+        probe.onerror = () => {};  // no snapshot yet -> keep the placeholder
+        probe.src = "/api/console/snapshot?" + base + "&t=" + Date.now();
+        fetch("/api/console/device?" + base, { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null)).then((j) => updateCamMeta(card, j)).catch(() => {});
+      });
+    }
+
+    async function refreshState() {
+      if (!SELECTED) return;
+      try {
+        const st = await api.get("/api/console/state?garden=" + encodeURIComponent(SELECTED));
+        if (st.offline) { setConn(false); renderStateTiles(null); }
+        else { setConn(true); renderStateTiles(st); }
+      } catch (e) { setConn(false); }
+      refreshGallery();
+    }
+
+    async function sendControl(gid, cmd) {
+      try {
+        const r = await api.post("/api/console/control", { garden: gid, cmd });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); toast("Control failed: " + (j.error || r.status), "error"); return; }
+        toast("Sent: " + cmd + " → " + gid, "ok");
+        refreshState();
+      } catch (e) { toast("Control failed (offline)", "error"); }
+    }
+
+    // ---------- modal framework ----------
+    let logES = null;   // live log-tail EventSource (only the Logs modal sets it)
+    function closeModal() { if (logES) { logES.close(); logES = null; } $("overlay").classList.remove("show"); $("modal").innerHTML = ""; $("modal").classList.remove("wide"); }
+    function openModal(html) { $("modal").innerHTML = html; $("overlay").classList.add("show"); }
+    $("overlay").addEventListener("click", (e) => { if (e.target === $("overlay")) closeModal(); });
+
+    function logLine(logEl, line, level) {
+      const span = document.createElement("div");
+      span.className = "l-" + (level || "info");
+      span.innerHTML = GP.logIcon(level) + " " + esc(line);
+      logEl.appendChild(span);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // Run an SSE stream op; wires log + spinner + done handling. Returns a promise.
+    function runStream(op, params, els, onDone) {
+      const { log, runstate, runlabel } = els;
+      log.classList.add("show"); log.innerHTML = "";
+      runstate.classList.add("show"); runlabel.textContent = "Running…";
+      const qs = new URLSearchParams({ op, ...params }).toString();
+      const es = new EventSource("/api/console/stream?" + qs);
+      es.onmessage = (ev) => { try { const d = JSON.parse(ev.data); if (d.line) logLine(log, d.line, d.level); } catch (e) {} };
+      es.addEventListener("done", (ev) => {
+        es.close();
+        let d = {}; try { d = JSON.parse(ev.data); } catch (e) {}
+        runstate.classList.remove("show");
+        if (d.ok) { logLine(log, "completed", "ok"); }
+        else { logLine(log, "failed (exit " + d.code + ")", "error"); }
+        if (onDone) onDone(d);
+      });
+      es.onerror = () => { es.close(); runstate.classList.remove("show"); logLine(log, "connection closed", "warn"); };
+      return es;
+    }
+
+    const logEls = (modal) => ({ log: modal.querySelector(".log"), runstate: modal.querySelector(".runstate"), runlabel: modal.querySelector(".runlabel") });
+
+    // ---------- modal: provision ----------
+    function openProvisionModal() {
+      openModal(
+        "<h3>New deployment</h3><div class='sub'>Stand up a Compute service, KV/Secret stores, model, and (optionally) the FOS archive + CDN" +
+        (INFO.mock ? " — <b>mock mode: no Fastly calls</b>." : ".") + "</div>" +
+        "<div class='grid2'><div class='field'><label>Service name</label><input type='text' class='input' id='p-name' placeholder='garden-protector-demo'></div>" +
+        "<div class='field'><label>Region</label><input type='text' class='input' id='p-region' value='us-east-1'></div></div>" +
+        "<div class='field'><label>Domain (optional)</label><input type='text' class='input' id='p-domain' placeholder='<service>.edgecompute.app'></div>" +
+        "<div class='field check'><input type='checkbox' class='checkbox' id='p-skip'><label for='p-skip'>Skip archive (FOS + CDN) — faster core deploy</label></div>" +
+        "<div class='runstate'><div class='spin'></div><span class='runlabel'></span></div>" +
+        "<div class='log'></div>" +
+        "<div class='modal-actions'><button class='btn btn-ghost' id='p-close'>Close</button><button class='btn btn-primary' id='p-run'>Deploy</button></div>");
+      const modal = $("modal");
+      $("p-close").addEventListener("click", closeModal);
+      $("p-run").addEventListener("click", () => {
+        const name = $("p-name").value.trim();
+        if (!name) { toast("Service name required", "error"); return; }
+        $("p-run").disabled = true;
+        runStream("provision", {
+          service_name: name, region: $("p-region").value.trim() || "us-east-1",
+          domain: $("p-domain").value.trim(), skip_archive: $("p-skip").checked ? "1" : "",
+        }, logEls(modal), async (d) => { $("p-run").disabled = false; if (d.ok) { await loadInfo(); SERVICE = $("svc").value; await loadOverview(); toast("Deployment provisioned", "ok"); } });
+      });
+    }
+
+    // ---------- modal: register device (+ garden) ----------
+    function openRegisterModal(presetGarden) {
+      const obs = INFO.taxonomy.observer_types, det = INFO.taxonomy.deterrent_types;
+      openModal(
+        "<h3>Register device</h3><div class='sub'>Add a device to a garden (new or existing). A non-default garden gets a freshly minted token; the default garden stays tokenless.</div>" +
+        "<div class='grid2'><div class='field'><label>Garden id</label><input type='text' class='input' id='r-garden' placeholder='backyard' value='" + esc(presetGarden || "") + "'></div>" +
+        "<div class='field'><label>Garden name</label><input type='text' class='input' id='r-gname' placeholder='Backyard'></div></div>" +
+        "<div class='field'><label>Timezone</label><input type='text' class='input' id='r-tz' value='America/New_York'></div>" +
+        "<div class='grid2'><div class='field'><label>Device id</label><input type='text' class='input' id='r-device' placeholder='cam-front'></div>" +
+        "<div class='field'><label>Node id</label><input type='text' class='input' id='r-node' value='pi-01'></div></div>" +
+        "<div class='grid2'><div class='field'><label>Kind</label><select class='select' id='r-kind'><option value='observer'>observer</option><option value='deterrent'>deterrent</option></select></div>" +
+        "<div class='field'><label>Type</label><select class='select' id='r-type'></select></div></div>" +
+        "<div class='field'><label>Display name</label><input type='text' class='input' id='r-name' placeholder='Front camera'></div>" +
+        "<div class='runstate'><div class='spin'></div><span class='runlabel'></span></div>" +
+        "<div class='log'></div>" +
+        "<div class='deploybox'><b>Pi deploy env</b> (gitignored, source on the Pi/gateway):<pre class='deploy-pre'></pre><button class='btn btn-soft btn-sm' id='r-copy'>Copy</button></div>" +
+        "<div class='modal-actions'><button class='btn btn-ghost' id='r-close'>Close</button><button class='btn btn-success' id='r-run'>Register</button></div>");
+      const modal = $("modal");
+      const typeSel = $("r-type");
+      const fillTypes = () => {
+        const list = $("r-kind").value === "observer" ? obs : det;
+        typeSel.innerHTML = list.map((t) => "<option value='" + esc(t) + "'>" + esc(t) + "</option>").join("");
+      };
+      $("r-kind").addEventListener("change", fillTypes); fillTypes();
+      $("r-close").addEventListener("click", closeModal);
+      $("r-run").addEventListener("click", () => {
+        const garden = $("r-garden").value.trim(), device = $("r-device").value.trim();
+        if (!garden || !device) { toast("Garden + device id required", "error"); return; }
+        $("r-run").disabled = true;
+        runStream("register-device", {
+          service_id: SERVICE || "", garden, garden_name: $("r-gname").value.trim(),
+          tz: $("r-tz").value.trim(), device, node: $("r-node").value.trim() || "pi-01",
+          kind: $("r-kind").value, type: typeSel.value, name: $("r-name").value.trim(),
+        }, logEls(modal), async (d) => {
+          $("r-run").disabled = false;
+          if (d.ok && d.deploy_env) {
+            const box = modal.querySelector(".deploybox"); box.classList.add("show");
+            const text = Object.entries(d.deploy_env).map(([k, v]) => k + "=" + v).join("\n");
+            modal.querySelector(".deploy-pre").textContent = text;
+            $("r-copy").addEventListener("click", () => { navigator.clipboard && navigator.clipboard.writeText(text); toast("Copied", "ok"); });
+          }
+          if (d.ok) { await loadOverview(); toast("Device registered", "ok"); }
+        });
+      });
+    }
+
+    // ---------- modal: rotate token ----------
+    function openRotateModal(gid) {
+      openModal(
+        "<h3>Rotate token · " + esc(gid) + "</h3><div class='sub'>Moves the current token to the <i>previous</i> slot and mints a new current. The edge accepts both during the window, so the Pi keeps working until you redeploy its env.</div>" +
+        "<div class='field'><label>Current (prior) token</label><input type='text' class='input' id='rt-prior' placeholder='paste the garden\\'s current GP_GARDEN_TOKEN'></div>" +
+        "<div class='runstate'><div class='spin'></div><span class='runlabel'></span></div><div class='log'></div>" +
+        "<div class='modal-actions'><button class='btn btn-ghost' id='rt-close'>Close</button><button class='btn btn-warning' id='rt-run'>Rotate</button></div>");
+      const modal = $("modal");
+      $("rt-close").addEventListener("click", closeModal);
+      $("rt-run").addEventListener("click", () => {
+        const prior = $("rt-prior").value.trim();
+        if (!prior) { toast("Prior token required", "error"); return; }
+        $("rt-run").disabled = true;
+        runStream("rotate-token", { service_id: SERVICE || "", garden: gid, prior_token: prior },
+          logEls(modal), (d) => { $("rt-run").disabled = false; if (d.ok) toast("Token rotated", "ok"); });
+      });
+    }
+
+    // ---------- modal: teardown ----------
+    function openTeardownModal() {
+      openModal(
+        "<h3 style='color:var(--red-ink)'>Teardown deployment</h3><div class='sub'>Destroys the Compute service, stores, and (optionally) the FOS bucket for <b>" + esc(SERVICE || "—") + "</b>. " +
+        (INFO.mock ? "Mock mode: nothing real is deleted." : "This requires a GLOBAL-scoped Fastly token in the console environment.") + "</div>" +
+        "<div class='field check'><input type='checkbox' class='checkbox' id='t-data'><label for='t-data'>Also empty + delete the FOS bucket (irreversible)</label></div>" +
+        "<div class='field'><label>Type the service id to confirm</label><input type='text' class='input input-error' id='t-confirm' placeholder='" + esc(SERVICE || "") + "'></div>" +
+        "<div class='runstate'><div class='spin'></div><span class='runlabel'></span></div><div class='log'></div>" +
+        "<div class='modal-actions'><button class='btn btn-ghost' id='t-close'>Close</button><button class='btn btn-error' id='t-run' disabled>Destroy</button></div>");
+      const modal = $("modal");
+      $("t-close").addEventListener("click", closeModal);
+      $("t-confirm").addEventListener("input", () => { $("t-run").disabled = $("t-confirm").value.trim() !== SERVICE; });
+      $("t-run").addEventListener("click", () => {
+        $("t-run").disabled = true;
+        runStream("teardown", { service_id: SERVICE || "", remove_data: $("t-data").checked ? "1" : "" },
+          logEls(modal), async (d) => { if (d.ok) { SERVICE = null; SELECTED = null; await loadInfo(); SERVICE = $("svc").value || null; await loadOverview(); toast("Teardown complete", "ok"); } });
+      });
+    }
+
+    // ---------- modal: cost calculator ----------
+    // Measures live usage (FOS object listing + Fastly Stats API) for the selected
+    // deployment over a window and prices it: actual-to-date + estimated monthly.
+    // Rates are editable and persisted server-side (configs/cost-rates.json).
+    const RATE_FIELDS = [
+      ["class_a_rate_per_1k", "Obj Storage Class A $/1k", "0.0001"],
+      ["class_b_rate_per_10k", "Obj Storage Class B $/10k", "0.0001"],
+      ["storage_rate_per_gb_month", "Storage $/GB-mo", "0.001"],
+      ["cdn_egress_rate_per_gb", "CDN egress $/GB", "0.001"],
+      ["compute_rate_per_10k_req", "Compute $/10k req", "0.0001"],
+      ["kv_class_a_rate_per_100k", "KV Class A (writes) $/100k", "0.01"],
+      ["kv_class_b_rate_per_1m", "KV Class B (reads) $/1M", "0.01"],
+      ["min_billed_days", "Storage min-bill days", "1"],
+    ];
+
+    function openCostModal() {
+      if (!SERVICE) { toast("No deployment selected", "error"); return; }
+      const gardenOpts = '<option value="all">All gardens (whole bucket)</option>' +
+        ((OVERVIEW && OVERVIEW.gardens) || []).filter((g) => g.garden_id !== "default")
+          .map((g) => "<option value='" + esc(g.garden_id) + "'>" + esc(g.name || g.garden_id) + "</option>").join("");
+      openModal(
+        "<h3>Costs · " + esc((INFO.services.find((s) => s.service_id === SERVICE) || {}).service_name || SERVICE) + "</h3>" +
+        "<div class='sub'>Measured Fastly usage priced at list rates — actual cost over the window plus an estimated monthly projection." +
+        (INFO.mock ? " <b>Mock mode: no live Fastly/FOS calls — figures will be unavailable.</b>" : "") + "</div>" +
+        "<div class='grid2'>" +
+        "<div class='field'><label>Window</label><select class='select' id='c-window'><option value='1h'>Last 1 hour</option><option value='24h'>Last 24 hours</option><option value='7d' selected>Last 7 days</option><option value='30d'>Last 30 days</option></select></div>" +
+        "<div class='field'><label>FOS storage scope</label><select class='select' id='c-garden'>" + gardenOpts + "</select></div></div>" +
+        "<div class='runstate show'><div class='spin'></div><span class='runlabel'>Measuring…</span></div>" +
+        "<div id='c-body'></div>" +
+        "<div class='modal-actions'><button class='btn btn-ghost' id='c-close'>Close</button><button class='btn btn-ghost btn-sm' id='c-refresh'>" + GP.svgUse("gp-refresh") + " Recompute</button></div>");
+      $("modal").classList.add("wide");
+      $("c-close").addEventListener("click", closeModal);
+      $("c-refresh").addEventListener("click", loadCost);
+      $("c-window").addEventListener("change", loadCost);
+      $("c-garden").addEventListener("change", loadCost);
+      loadCost();
+    }
+
+    async function loadCost() {
+      const body = $("c-body"); if (!body) return;
+      const rs = document.querySelector("#modal .runstate"); if (rs) rs.classList.add("show");
+      body.innerHTML = "";
+      const win = $("c-window").value, garden = $("c-garden").value;
+      let d;
+      try {
+        d = await api.get("/api/console/cost?service_id=" + encodeURIComponent(SERVICE) +
+          "&window=" + encodeURIComponent(win) + "&garden=" + encodeURIComponent(garden));
+      } catch (e) {
+        if (rs) rs.classList.remove("show");
+        body.innerHTML = "<div class='empty'>Could not measure costs (" + esc(e.message) + ").</div>";
+        return;
+      }
+      if (rs) rs.classList.remove("show");
+      renderCost(body, d);
+    }
+
+    function renderCost(body, d) {
+      const u = d.usage || {}, A = (d.actual || {}).lines || [], M = (d.monthly || {}).lines || [];
+      // availability per cost-line key, read from the raw usage (null leaf = unavailable)
+      const avail = {
+        storage: !!u.fos, fos_class_a: !!u.fos_ops, fos_class_b: !!u.fos_ops,
+        cdn_egress: !!u.cdn, compute: !!u.compute, store_ops: !!(u.store_ops && u.store_ops.kv != null),
+      };
+      const measured = {
+        storage: u.fos ? (fmtGB(u.fos.bytes) + " · " + fmtN(u.fos.objects) + " images") : null,
+        fos_class_a: u.fos_ops ? fmtN(u.fos_ops.class_a) + " ops" : null,
+        fos_class_b: u.fos_ops ? fmtN(u.fos_ops.class_b) + " ops" : null,
+        cdn_egress: u.cdn ? fmtGB(u.cdn.bandwidth_bytes) + " · " + fmtN(u.cdn.requests) + " req" : null,
+        compute: u.compute ? fmtN(u.compute.requests) + " req" : null,
+        store_ops: (u.store_ops && u.store_ops.kv != null)
+          ? fmtN((u.store_ops.kv || 0) + (u.store_ops.secret || 0) + (u.store_ops.config || 0)) + " ops" : null,
+      };
+      // Hero stat cards
+      const hero =
+        '<div class="cost-hero">' +
+        tile("FOS storage", avail.storage ? fmtGB(u.fos.bytes) : "—",
+          avail.storage ? fmtN(u.fos.objects) + " images stored" : "unavailable") +
+        tile("FOS Class A ops", avail.fos_class_a ? fmtN(u.fos_ops.class_a) : "—", "account-wide · window") +
+        tile("FOS Class B ops", avail.fos_class_b ? fmtN(u.fos_ops.class_b) : "—", "account-wide · window") +
+        tileTotal("Estimated / month", fmtUSD((d.monthly || {}).total), "all resources at current rates") +
+        "</div>";
+      // Breakdown table (actual lines zipped with monthly lines, same key order)
+      const rows = A.map((a, i) => {
+        const m = M[i] || {}, ok = avail[a.key];
+        const est = a.estimated ? "<span class='est-tag'>est</span>" : "";
+        const meas = ok ? esc(measured[a.key] || "") : "<span class='unavail'>unavailable</span>";
+        return "<tr><td>" + esc(a.label) + est + "</td>" +
+          "<td class='num" + (ok ? "" : " unavail") + "'>" + meas + "</td>" +
+          "<td class='num'>" + (ok ? fmtUSD(a.cost) : "—") + "</td>" +
+          "<td class='num'>" + (ok ? fmtUSD(m.cost) : "—") + "</td></tr>";
+      }).join("");
+      const table =
+        "<table class='table table-sm cost'><thead><tr><th>Resource</th><th class='num'>Measured · " + esc(d.window_label || (d.window_days + "d")) + "</th>" +
+        "<th class='num'>Cost · " + esc(d.window_label || (d.window_days + "d")) + "</th><th class='num'>Est. / month</th></tr></thead><tbody>" + rows +
+        "<tr><td><b>Total</b></td><td></td><td class='num'><b>" + fmtUSD((d.actual || {}).total) + "</b></td>" +
+        "<td class='num'><b>" + fmtUSD((d.monthly || {}).total) + "</b></td></tr></tbody></table>";
+      // Editable rates
+      const r = d.rates || {};
+      const rgrid = RATE_FIELDS.map(([k, label, step]) =>
+        "<div><label>" + label + "</label><input type='text' class='input input-sm' inputmode='decimal' data-rate='" + k + "' value='" + esc(r[k]) + "'></div>").join("");
+      const rates =
+        "<details class='rates'><summary>Pricing rates (editable)</summary>" +
+        "<div class='rgrid'>" + rgrid + "</div>" +
+        "<button class='btn btn-primary btn-sm' id='c-save-rates'>Save rates &amp; recompute</button></details>";
+      const notes =
+        "<div class='hint'>FOS operation counts are reported <b>account-wide</b> by Fastly (not per-service). " +
+        "KV/Secret/Config ops are <b>estimated</b> from edge request volume (no billed source exists) — their $ is 0 until you set a rate. " +
+        "Measuring storage lists the bucket (a few Class&nbsp;A ops).</div>";
+      body.innerHTML = hero + table + rates + notes;
+      const save = $("c-save-rates");
+      if (save) save.addEventListener("click", async () => {
+        const patch = {};
+        body.querySelectorAll("[data-rate]").forEach((el) => { patch[el.dataset.rate] = el.value.trim(); });
+        save.disabled = true;
+        const resp = await api.post("/api/console/cost-rates", patch);
+        save.disabled = false;
+        if (resp.ok) { toast("Rates saved", "ok"); loadCost(); }
+        else { toast("Could not save rates", "error"); }
+      });
+    }
+
+    function tile(label, value, sub) {
+      return '<div class="tile"><div class="l">' + esc(label) + '</div><div class="v big">' + esc(value) +
+        '</div><div class="sub">' + esc(sub) + "</div></div>";
+    }
+    function tileTotal(label, value, sub) {
+      return '<div class="tile total"><div class="l">' + esc(label) + '</div><div class="v big">' + esc(value) +
+        '</div><div class="sub">' + esc(sub) + "</div></div>";
+    }
+
+    // ---------- modal: live log tail ----------
+    function openLogsModal() {
+      const svcOpts = (INFO.services || []).map((s) =>
+        "<option value='" + esc(s.service_id) + "'" + (s.service_id === SERVICE ? " selected" : "") + ">" +
+        esc(s.service_name || s.service_id) + "</option>").join("");
+      openModal(
+        "<h3>Edge logs · live tail</h3><div class='sub'>Durable FOS history merged with live <code>fastly log-tail</code>, streamed over SSE. Lines look like <code>[GP] trace=… component=… op=… outcome=… detail=…</code>.</div>" +
+        "<div class='grid2'><div class='field'><label>Deployment</label><select class='select' id='lg-svc'>" + (svcOpts || "<option value=''>— no deployments —</option>") + "</select></div>" +
+        "<div class='field'><label>Filter (substring — e.g. <span class='mono'>trace=</span> or <span class='mono'>outcome=error</span>)</label><input type='text' class='input' id='lg-filter' placeholder='(all lines)'></div></div>" +
+        "<div class='field check'><button class='btn btn-success btn-sm' id='lg-start'>" + GP.svgUse("gp-play", "solid") + " Tail</button> <button class='btn btn-ghost btn-sm text-error' id='lg-stop' disabled>" + GP.svgUse("gp-stop", "solid") + " Stop</button> <span id='lg-stat' class='gid mono'></span></div>" +
+        "<div class='log' id='lg-log' style='max-height:60vh'></div>" +
+        "<div class='modal-actions'><button class='btn btn-ghost' id='lg-close'>Close</button></div>");
+      const logEl = $("lg-log"); logEl.classList.add("show");
+      const stat = $("lg-stat"), start = $("lg-start"), stop = $("lg-stop");
+      const stopTail = () => { if (logES) { logES.close(); logES = null; } start.disabled = false; stop.disabled = true; stat.textContent = "stopped"; };
+      start.addEventListener("click", () => {
+        const sid = $("lg-svc").value;
+        if (!sid) { toast("No deployment selected", "error"); return; }
+        stopTail(); logEl.innerHTML = "";
+        const filt = () => $("lg-filter").value.trim();
+        logES = new EventSource("/api/console/logs?service_id=" + encodeURIComponent(sid));
+        start.disabled = true; stop.disabled = false; stat.textContent = "connecting…";
+        logES.addEventListener("ready", () => { stat.textContent = "live"; });
+        logES.onmessage = (ev) => {
+          try {
+            const d = JSON.parse(ev.data); if (!d.line) return;
+            const f = filt(); if (f && !d.line.includes(f)) return;
+            logLine(logEl, d.line, d.level);
+          } catch (e) {}
+        };
+        logES.onerror = () => { stat.textContent = "disconnected"; };
+      });
+      stop.addEventListener("click", stopTail);
+      $("lg-close").addEventListener("click", closeModal);
+    }
+
+    // ---------- wire toolbar ----------
+    $("btn-cost").addEventListener("click", openCostModal);
+    $("btn-logs").addEventListener("click", openLogsModal);
+    $("svc").addEventListener("change", () => { SERVICE = $("svc").value || null; SELECTED = null; loadOverview(); });
+    $("btn-refresh").addEventListener("click", () => { loadInfo().then(loadOverview); });
+    $("btn-provision").addEventListener("click", openProvisionModal);
+    $("btn-add-garden").addEventListener("click", () => openRegisterModal(""));
+    $("btn-teardown").addEventListener("click", () => { if (!SERVICE) { toast("No deployment selected", "error"); return; } openTeardownModal(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+    // ---------- go ----------
+    async function boot() { await loadInfo(); await loadOverview(); }
+    boot();
+    statePoll = setInterval(refreshState, 3000);
+  </script>
+</body>
+</html>

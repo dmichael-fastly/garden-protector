@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Costs</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    /* body type + base reset come from gp.css (shared body{} primitive). */
+    /* Header chrome (brand, garden name, nav, theme toggle) + its CSS are injected
+       from the shared partial hardware/portal_header.html — single source of truth.
+       Buttons/inputs/tables on this page are DaisyUI (.btn/.input/.table) — no generic
+       element rules live here, so they can't override DaisyUI's layered styles. */
+    main { max-width: var(--page-narrow); margin: 0 auto; padding: 32px 18px 88px; }
+    .page-title { font-size: 26px; font-weight: var(--weight-display); letter-spacing: -0.4px; margin: 0 0 6px; }
+    .page-sub { color: var(--muted); font-size: 15px; margin: 0 0 26px; max-width: 60ch; }
+
+    /* Hero — the celebrated monthly figure. Soft success-tinted surface + raised
+       elevation so the headline number reads as the page's focal point. */
+    .hero { background: var(--panel);
+      border: 1px solid color-mix(in srgb, var(--green) 45%, var(--hairline));
+      border-radius: var(--radius-lg); padding: 30px 24px; margin-bottom: 24px; text-align: center;
+      box-shadow: var(--shadow-2);
+      background-image: linear-gradient(180deg, color-mix(in srgb, var(--green) 6%, transparent), transparent 60%); }
+    .hero .cap { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); font-weight: 600; }
+    .hero .amount { font-size: 48px; font-weight: var(--weight-display); margin: 8px 0 2px; letter-spacing: -1.5px;
+      font-variant-numeric: tabular-nums; }
+    .hero .approx { color: var(--muted); font-weight: 500; font-size: 26px; }
+    .hero .per { color: var(--muted); font-size: 14px; }
+
+    /* Forward-looking estimate — a quiet success-accented callout. */
+    .forward { background: var(--panel); border: 1px solid var(--hairline);
+      border-left: 3px solid var(--green);
+      border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 24px; font-size: 14px; line-height: 1.5;
+      box-shadow: var(--shadow-1); }
+    .forward .ft { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .forward b { font-variant-numeric: tabular-nums; }
+    .forward a { color: var(--green-ink); text-decoration: none; font-weight: 600; }
+    .forward a:hover { text-decoration: underline; }
+    .forward .fsub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+    .controls { display: flex; gap: 10px; align-items: center; justify-content: center; margin-bottom: 24px; flex-wrap: wrap; }
+    .controls .controls-lbl { color: var(--muted); font-size: 13px; }
+    /* The window picker is a DaisyUI .join of .btn buttons; the page JS toggles a plain
+       ".active" class on the chosen one (logic unchanged), so map that to the brand-primary
+       look here. Scoped to #seg so it never affects other DaisyUI buttons. */
+    #seg .btn.active { background-color: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+    #seg .btn.active:hover { background-color: var(--brand); border-color: var(--brand); }
+
+    /* Cost line-item cards. Each card carries an icon, a body (label/detail/blurb +
+       its operations table), and the monthly amount. Hover lifts subtly. */
+    .items { display: flex; flex-direction: column; gap: 14px; }
+    .item { display: flex; align-items: flex-start; gap: 14px; background: var(--panel);
+      border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 16px 18px;
+      box-shadow: var(--shadow-1); transition: box-shadow .14s ease, border-color .14s ease; }
+    .item:hover { box-shadow: var(--shadow-2); border-color: color-mix(in srgb, var(--text) 12%, var(--hairline)); }
+    .item .ic { display: inline-flex; align-items: center; justify-content: center;
+      width: 40px; height: 40px; flex: 0 0 auto; border-radius: var(--radius-sm);
+      background: var(--panel-2); color: var(--text); font-size: 22px; }
+    .item .ic .gp-ic { width: 22px; height: 22px; }
+    .item .body { flex: 1; min-width: 0; }
+    .item .lbl-row { display: flex; align-items: center; gap: 8px; }
+    .item .lbl { font-weight: 600; font-size: 15px; }
+    .item .det { color: var(--text); font-size: 13px; opacity: .85; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .item .blurb { color: var(--muted); font-size: 13px; margin-top: 5px; line-height: 1.45; }
+    .item .amt { font-weight: 700; font-size: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; padding-top: 2px; }
+    .item.off { opacity: .6; } .item.off .amt { color: var(--muted); }
+    .item.off .ic { color: var(--muted); }
+    /* Bespoke round "i" affordance (kept small + inline next to the label). */
+    .info { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--hairline);
+      background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 700; line-height: 18px;
+      text-align: center; cursor: pointer; padding: 0; font-family: inherit;
+      transition: color .12s ease, border-color .12s ease; }
+    .info:hover { color: var(--text); border-color: var(--muted); }
+
+    /* Collapsible explainers — refined card surface with a clean disclosure row. */
+    .explain { margin-top: 24px; background: var(--panel); border: 1px solid var(--hairline);
+      border-radius: var(--radius-md); box-shadow: var(--shadow-1); overflow: hidden; }
+    .explain summary { cursor: pointer; padding: 15px 18px; font-weight: 600; font-size: 14px; list-style: none;
+      display: flex; align-items: center; gap: 8px; transition: background .12s ease; }
+    .explain summary:hover { background: var(--panel-2); }
+    .explain summary::-webkit-details-marker { display: none; }
+    .explain[open] summary { border-bottom: 1px solid var(--hairline); }
+    .explain .inner { padding: 6px 18px 18px; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+    .explain .inner p { margin: 12px 0 0; }
+    .explain .inner b { color: var(--text); font-weight: 600; }
+
+    /* Custom-pricing editor — the inputs are DaisyUI .input (built in JS); the grid
+       lays them out as label | field rows. */
+    .rate-grid { display: grid; grid-template-columns: 1fr 130px; gap: 10px 14px; align-items: center; margin: 16px 0 4px; }
+    .rate-row { display: contents; }
+    .rate-row span { font-size: 13px; color: var(--text); }
+    .rate-grid input { text-align: right; font-variant-numeric: tabular-nums; }
+    .rate-hint { font-size: 12.5px; }
+    .rate-msg { margin-left: 12px; font-size: 13px; color: var(--muted); }
+
+    /* Per-item help modal (bespoke overlay; NOT gp.css .modal). */
+    .modal-bg { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: center;
+      justify-content: center; padding: 20px; z-index: 50;
+      backdrop-filter: blur(2px); }
+    .modal-card { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-lg); max-width: 440px;
+      width: 100%; padding: 24px; box-shadow: var(--shadow-overlay); }
+    .modal-card .m-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .modal-card .m-ic { display: inline-flex; align-items: center; justify-content: center;
+      width: 44px; height: 44px; flex: 0 0 auto; border-radius: var(--radius-sm);
+      background: var(--panel-2); font-size: 26px; }
+    .modal-card .m-ic .gp-ic { width: 26px; height: 26px; }
+    .modal-card .m-title { font-size: 18px; font-weight: 700; }
+    .modal-card .m-amt { color: var(--muted); font-size: 14px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .modal-card .m-body { color: var(--text); font-size: 14px; line-height: 1.6; }
+
+    .note { color: var(--muted); font-size: 12.5px; margin-top: 18px; text-align: center; }
+    .hero-note { color: var(--muted); font-size: 12px; text-align: center; margin: -8px 0 16px; line-height: 1.5; }
+    .bd-na { color: var(--muted); }
+    /* Per-card operations table (the Fastly ops rolled into each card). */
+    .item .ops { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
+    .item .ops th, .item .ops td { padding: 6px 6px; border-top: 1px solid var(--hairline); vertical-align: top; }
+    .item .ops th { color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; text-align: left; }
+    .item .ops th:not(:first-child), .item .ops .bd-n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .item .ops .op-l { display: block; color: var(--text); }
+    .item .ops .op-s { display: block; color: var(--muted); font-size: 10.5px; margin-top: 1px; }
+    .item .ops .op-rate { color: var(--text); opacity: .8; font-variant-numeric: tabular-nums; }
+    .item .ops .op-star, .item .ops-note .op-star { color: var(--amber-ink); font-weight: 700; }
+    .item .ops-note { color: var(--muted); font-size: 11px; margin-top: 8px; line-height: 1.5; }
+    .state { text-align: center; color: var(--muted); padding: 48px 12px; }
+    .spin { width: 22px; height: 22px; border: 3px solid var(--hairline); border-top-color: var(--green);
+      border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + all controls (status, Pi health, tz, theme) come from the shared header partial -->
+  </header>
+  <main>
+    <h1 class="page-title">What your garden costs</h1>
+    <p class="page-sub">A friendly estimate of your monthly cloud bill, measured from how much your garden has actually been working.</p>
+
+    <div class="controls">
+      <span class="controls-lbl">Based on the last</span>
+      <div class="join" id="seg">
+        <button class="btn btn-sm join-item" data-win="1h">1 hour</button>
+        <button class="btn btn-sm join-item" data-win="24h">24 hours</button>
+        <button class="btn btn-sm join-item" data-win="7d">7 days</button>
+        <button class="btn btn-sm join-item active" data-win="30d">30 days</button>
+      </div>
+    </div>
+
+    <div id="content" role="status" aria-live="polite" aria-atomic="true">
+      <div class="state"><span class="spin"></span><div style="margin-top:10px">Adding it up…</div></div>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+    // The cost API still sends each line-item's icon as an emoji glyph; map it to a
+    // shared sprite icon at the render site. Unknown/missing values fall back to "•".
+    const ICON_FOR = { "📸": ["gp-camera", ""], "📤": ["gp-upload", ""], "🛡️": ["gp-shield", "brand"], "📝": ["gp-edit", ""] };
+    const itemIcon = (g) => { const m = ICON_FOR[g]; return m ? GP.svgUse(m[0], m[1]) : esc(g || "•"); };
+    let WIN = "30d";
+    let ITEMS = [];
+
+    // Forward-looking photo-storage estimate from the current capture settings (what
+    // the Storage page shows). The hero above is measured from real usage; this is the
+    // "going forward" companion — forward vs. actual. Settings-based, so window-agnostic.
+    let FORWARD = null;
+    const INTERVAL_TXT = { 15: "every 15 seconds", 30: "every 30 seconds", 60: "every minute",
+      300: "every 5 minutes", 900: "every 15 minutes" };
+    const QUALITY_TXT = { high: "Crisp", standard: "Standard", saver: "Saver" };
+
+    function fmtUsd(n) {
+      n = Number(n || 0);
+      if (n >= 1000) return "$" + Math.round(n).toLocaleString();
+      if (n >= 1) return "$" + n.toFixed(2);
+      return "$" + n.toFixed(4);
+    }
+
+    function fmtCount(n) { return (n === null || n === undefined) ? null : Number(n).toLocaleString(); }
+    function fmtBytes(b) {
+      b = Number(b || 0);
+      const g = b / (1024 * 1024 * 1024);
+      if (g >= 1) return g.toFixed(2) + " GB";
+      return Math.round(b / (1024 * 1024)).toLocaleString() + " MB";
+    }
+
+    // Per-card operations table: the exact Fastly operations that roll up into a card,
+    // with measured count (this window), per-month projection, and cost. Rendered inside
+    // each card so every section shows its overall number AND its underlying ops.
+    function opsRows(ops, winLabel) {
+      if (!ops || !ops.length) return "";
+      const cell = (v) => v === null ? '<span class="bd-na">—</span>' : v;
+      const fmt = (r, v) => v === null || v === undefined ? null : (r.kind === "bytes" ? fmtBytes(v) : fmtCount(v));
+      let starred = false;
+      const body = ops.map((r) => {
+        const bits = [esc(r.scope)];
+        if (r.basis && r.basis !== "measured") bits.push(esc(r.basis));
+        if (r.rate) bits.push('<span class="op-rate">' + esc(r.rate) + '</span>');
+        if (r.star) starred = true;
+        const costTxt = (r.cost === null || r.cost === undefined) ? null
+          : (fmtUsd(r.cost) + (r.star ? '<span class="op-star">*</span>' : ''));
+        return '<tr>' +
+          '<td><span class="op-l">' + esc(r.label) + '</span><span class="op-s">' + bits.join(" · ") + '</span></td>' +
+          '<td class="bd-n">' + cell(fmt(r, r.count)) + '</td>' +
+          '<td class="bd-n">' + cell(fmt(r, r.per_mo)) + '</td>' +
+          '<td class="bd-n">' + cell(costTxt) + '</td>' +
+        '</tr>';
+      }).join("");
+      const foot = starred ? '<div class="ops-note"><span class="op-star">*</span> Billed ' +
+        'account-wide — covers every service on this Fastly account, not just this garden. Fastly ' +
+        "doesn't split object-storage operations per garden, so it's included in the total as-is.</div>" : "";
+      return '<table class="ops"><thead><tr><th>Fastly operation</th><th>' + esc(winLabel) +
+        '</th><th>/mo</th><th>$/mo</th></tr></thead><tbody>' + body + '</tbody></table>' + foot;
+    }
+
+    async function loadForward() {
+      try {
+        const r = await fetch("/api/capture", { cache: "no-store" });
+        if (r.ok) FORWARD = await r.json();
+      } catch (e) {}
+    }
+
+    function forwardCard() {
+      if (!FORWARD || !FORWARD.estimates || !FORWARD.estimates.cameras) return "";
+      const cell = (FORWARD.estimates.table || {})[FORWARD.interval_s + "|" + FORWARD.quality];
+      if (!cell) return "";
+      const every = INTERVAL_TXT[FORWARD.interval_s] || ("every " + FORWARD.interval_s + "s");
+      const q = QUALITY_TXT[FORWARD.quality] || FORWARD.quality;
+      return '<div class="forward"><div class="ft">' + GP.svgUse("gp-camera") + ' Going forward — about <b>' +
+        fmtUsd(cell.monthly_usd) + '/month</b> to keep photos</div>' +
+        '<div class="fsub">At your current saving settings (a photo ' + esc(every) + ', ' + esc(q) +
+        ' quality). The total above is measured from real use; this is what today\'s settings will cost. ' +
+        'Tune it on the <a href="/storage">Photo storage</a> page.</div></div>';
+    }
+
+    async function load() {
+      const host = $("content");
+      host.innerHTML = '<div class="state"><span class="spin"></span><div style="margin-top:10px">Adding it up…</div></div>';
+      let d;
+      try {
+        const r = await fetch("/api/cost?window=" + encodeURIComponent(WIN), { cache: "no-store" });
+        if (r.status === 401) { location.href = "/"; return; }
+        d = await r.json();
+      } catch (e) {
+        host.innerHTML = '<div class="state">Couldn\'t reach the garden right now. Try again in a moment.</div>';
+        return;
+      }
+      if (!d.available) {
+        host.innerHTML = '<div class="state">' + esc(d.note || "Nothing to measure yet — set up your garden first.") + '</div>';
+        return;
+      }
+      render(host, d);
+    }
+
+    function render(host, d) {
+      ITEMS = d.items || [];
+      const mock = d.mock ? ' <span class="gp-pill monitor" style="vertical-align:middle">demo mode</span>' : "";
+      const hero =
+        '<div class="hero"><div class="cap">Estimated monthly bill' + mock + '</div>' +
+        '<div class="amount"><span class="approx">≈ </span>' + esc(d.monthly_total_str) + '</div>' +
+        '<div class="per">per month</div></div>';
+      // Short windows multiply a tiny sample up to a month, so the number swings a lot.
+      // Surface that right under the figure (not just in the footnote) so a big bouncy
+      // reading is contextualized on sight rather than alarming.
+      const heroNote = (d.window_hours && d.window_hours < 168)
+        ? '<div class="hero-note">A quick reading from the last <b>' + esc(d.window_label || (d.window_days + ' days')) +
+          '</b>, stretched to a month — it bounces around. The <b>30 days</b> view gives the steadiest picture.</div>'
+        : '';
+      const items = '<div class="items">' + ITEMS.map((it, i) =>
+        '<div class="item' + (it.available ? "" : " off") + '">' +
+          '<div class="ic">' + itemIcon(it.icon) + '</div>' +
+          '<div class="body">' +
+            '<div class="lbl-row"><span class="lbl">' + esc(it.label) + '</span>' +
+              (it.help ? '<button class="info" type="button" data-idx="' + i + '" aria-label="What is this?" title="What is this?">i</button>' : "") +
+            '</div>' +
+            '<div class="det">' + esc(it.detail) + '</div>' +
+            (it.blurb ? '<div class="blurb">' + esc(it.blurb) + '</div>' : "") +
+            opsRows(it.ops, d.window_label || "window") +
+          '</div>' +
+          '<div class="amt">' + esc(it.monthly) + '</div>' +
+        '</div>').join("") + '</div>';
+      const explain =
+        '<details class="explain"><summary>' + GP.svgUse("gp-question") + 'How is this worked out?</summary><div class="inner">' +
+        '<p>We add up how hard your garden has actually been working over the last <b>' + esc(d.window_label || (d.window_days + ' days')) + '</b>, ' +
+        'then stretch that out to a full month to estimate the bill. Shorter windows give a quicker but bouncier reading; the longer ones settle down.</p>' +
+        '<p><b>' + GP.svgUse("gp-camera") + ' Photos kept safe</b> — the cloud space your saved photos take up, plus uploading each new one your cameras capture.</p>' +
+        '<p><b>' + GP.svgUse("gp-upload") + ' Photo deliveries</b> — sending photos and live views to your phone or browser whenever you check in.</p>' +
+        '<p><b>' + GP.svgUse("gp-shield", "brand") + ' Always-on guarding</b> — the cloud brain that sizes up every motion alert and decides what to do. Each look is one <b>check</b>.</p>' +
+        '<p><b>' + GP.svgUse("gp-edit") + ' Notes &amp; look-ups</b> — the quick note each saved photo leaves (its newest snapshot and what was seen) plus the settings and state your garden reads as it works, so your dashboard always shows the latest.</p>' +
+        '<p><b>A note on photo storage:</b> Fastly bills every photo for a 30-day minimum — even one removed sooner still counts for 30 days — so a brand-new garden is already charged for a full month from day one.</p>' +
+        "<p>Prices use Fastly's standard published rates. It's a friendly estimate, not an invoice — your real bill can vary a little. " +
+        'Tap the <b>i</b> beside any line for more on it.</p>' +
+        '</div></details>';
+      const note = '<div class="note">' + esc(d.note || "") + '</div>';
+      host.innerHTML = hero + heroNote + forwardCard() + items + explain + ratesEditor(d.rates) + note;
+    }
+
+    // ---------- custom-pricing editor (negotiated rates instead of list price) ----------
+    const RATE_FIELDS = [
+      ["storage_rate_per_gb_month", "Cloud storage — $ per GB each month", "0.001"],
+      ["cdn_egress_rate_per_gb", "Sending photos (egress) — $ per GB", "0.001"],
+      ["class_a_rate_per_1k", "Saving photos (FOS Class A) — $ per 1,000", "0.0001"],
+      ["class_b_rate_per_10k", "Fetching photos (FOS Class B) — $ per 10,000", "0.0001"],
+      ["compute_rate_per_10k_req", "Guarding (Compute requests) — $ per 10,000", "0.0001"],
+      ["kv_class_a_rate_per_100k", "Notes — KV writes (Class A) — $ per 100,000", "0.01"],
+      ["kv_class_b_rate_per_1m", "Look-ups — KV reads (Class B) — $ per 1,000,000", "0.01"],
+      ["min_billed_days", "Minimum days billed per photo", "1"],
+    ];
+
+    function ratesEditor(rates) {
+      rates = rates || {};
+      const rows = RATE_FIELDS.map(([k, label, step]) =>
+        '<label class="rate-row"><span>' + esc(label) + '</span>' +
+        '<input class="input input-sm w-full" type="number" step="' + step + '" min="0" data-rk="' + k + '" value="' + esc(rates[k]) + '"></label>'
+      ).join("");
+      return '<details class="explain"><summary>' + GP.svgUse("gp-question") + 'Using custom Fastly pricing?</summary><div class="inner">' +
+        "<p>The figures above use Fastly's standard published prices. On a negotiated rate? " +
+        'Enter your own numbers and the estimate updates right away.</p>' +
+        '<div class="rate-grid">' + rows + '</div>' +
+        '<p class="rate-hint"><b>Minimum days billed per photo</b> sets how long Fastly charges for each photo even if it\'s removed sooner (30 by default).</p>' +
+        '<button class="btn btn-primary btn-sm" type="button" id="rate-save">Save my prices</button>' +
+        '<span class="rate-msg" id="rate-msg"></span>' +
+        '</div></details>';
+    }
+
+    async function saveRates() {
+      const patch = {};
+      document.querySelectorAll("#content input[data-rk]").forEach((i) => {
+        const v = i.value.trim();
+        if (v !== "") patch[i.dataset.rk] = Number(v);
+      });
+      const msg = $("rate-msg");
+      if (msg) { msg.textContent = "Saving…"; }
+      try {
+        const r = await fetch("/api/cost-rates", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!r.ok) throw new Error("save failed");
+        load();   // reprice with the new rates (reuses cached usage -> instant)
+      } catch (e) {
+        if (msg) { msg.textContent = "Couldn't save — try again."; }
+      }
+    }
+
+    // ---------- per-item help modal ----------
+    function openModal(it) {
+      if (!it) return;
+      const bg = document.createElement("div");
+      bg.className = "modal-bg";
+      const sub = it.available ? esc(it.monthly) + " / month · " + esc(it.detail) : "currently unavailable";
+      bg.innerHTML =
+        '<div class="modal-card" role="dialog" aria-modal="true" aria-label="' + esc(it.label) + '">' +
+          '<div class="m-head"><div class="m-ic">' + itemIcon(it.icon) + '</div>' +
+            '<div><div class="m-title">' + esc(it.label) + '</div>' +
+            '<div class="m-amt">' + sub + '</div></div></div>' +
+          '<div class="m-body">' + esc(it.help || it.blurb || "") + '</div>' +
+          '<button class="m-close btn btn-block mt-4" type="button">Got it</button>' +
+        '</div>';
+      const close = () => { bg.remove(); document.removeEventListener("keydown", onKey); };
+      const onKey = (e) => { if (e.key === "Escape") close(); };
+      bg.addEventListener("click", (e) => { if (e.target === bg) close(); });
+      bg.querySelector(".m-close").addEventListener("click", close);
+      document.addEventListener("keydown", onKey);
+      document.body.appendChild(bg);
+      bg.querySelector(".m-close").focus();
+    }
+
+    $("content").addEventListener("click", (e) => {
+      const info = e.target.closest(".info");
+      if (info) { openModal(ITEMS[Number(info.dataset.idx)]); return; }
+      if (e.target.closest("#rate-save")) { saveRates(); }
+    });
+
+    // window segmented control
+    $("seg").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-win]"); if (!b) return;
+      WIN = b.dataset.win;
+      $("seg").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      load();
+    });
+
+    // Fetch the forward estimate first (fast — local config + cost math, no network),
+    // then render the page so the "going forward" card is present on first paint.
+    (async () => { await loadForward(); load(); })();
+  </script>
+</body>
+</html>

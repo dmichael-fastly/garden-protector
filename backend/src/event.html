@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fastly Garden Protector — Event</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <meta name="theme-color" content="#FF282D">
+  <link rel="stylesheet" href="/static/app.css?v=__ASSET_VERSION__">
+  <link rel="stylesheet" href="/static/gp.css?v=__ASSET_VERSION__">
+  <script src="/static/gp.js?v=__ASSET_VERSION__"></script>
+  <style>
+    main { max-width: var(--page-wide); margin: 0 auto; padding: 28px 24px 56px; }
+    .ev-top { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .ev-back { font-size: 13px; font-weight: 600; color: var(--brand-link); text-decoration: none;
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px 6px 10px;
+      border: 1px solid var(--hairline); border-radius: var(--radius-pill); background: var(--panel-2);
+      transition: background .12s ease, border-color .12s ease; }
+    .ev-back:hover { background: var(--panel-3); border-color: color-mix(in srgb, var(--brand) 35%, var(--hairline)); }
+    .ev-msg { color: var(--muted); font-size: 14px; padding: 56px 4px; text-align: center; }
+    /* hero: photo on the left, the story on the right */
+    .ev-hero { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr); gap: 24px; align-items: start; }
+    @media (max-width: 880px) { .ev-hero { grid-template-columns: 1fr; } main { padding: 18px 16px 44px; } }
+    .ev-stage { position: relative; background: #000; border-radius: var(--radius-lg); overflow: hidden;
+      aspect-ratio: 4 / 3; border: 1px solid var(--hairline); box-shadow: var(--shadow-2); }
+    .ev-stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .ev-badge { position: absolute; top: 12px; left: 12px; display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 700; letter-spacing: .2px; padding: 6px 12px; border-radius: var(--radius-pill);
+      color: #fff; background: rgba(0,0,0,.62); backdrop-filter: blur(4px);
+      box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+    .ev-badge.sprayed { background: rgba(214,40,45,.88); }
+    .ev-badge.sighting { background: rgba(20,20,20,.72); }
+    .ev-badge.clear { background: rgba(28,120,60,.85); }
+    .ev-badge .gp-ic { width: 15px; height: 15px; }
+    .ev-panel { display: flex; flex-direction: column; gap: 18px; }
+    .ev-headline { font-size: 23px; font-weight: 800; line-height: 1.2; display: flex; align-items: center; gap: 10px; letter-spacing: -.3px; }
+    .ev-headline .gp-ic { width: 23px; height: 23px; flex: none; }
+    .ev-headline.sprayed { color: var(--red-ink); }
+    .ev-when { color: var(--muted); font-size: 13px; margin-top: -10px; }
+    .ev-conf { display: flex; flex-direction: column; gap: 7px; }
+    .ev-conf .lab { display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+    .ev-bar { height: 9px; border-radius: var(--radius-pill); background: var(--panel-3); overflow: hidden; }
+    .ev-bar > div { height: 100%; width: 0; background: var(--brand); transition: width .3s ease; }
+    .ev-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px;
+      background: var(--panel-2); border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 16px; }
+    .ev-fact .k { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; }
+    .ev-fact .v { font-size: 14px; font-weight: 600; margin-top: 3px; word-break: break-word; }
+    .ev-fact .v.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 500; font-size: 12.5px; }
+    .ev-note { font-size: 13.5px; line-height: 1.5; color: var(--text); background: var(--panel-2);
+      border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 12px 14px; display: flex; gap: 10px; }
+    .ev-note .gp-ic { color: var(--brand); flex: none; margin-top: 1px; }
+    .ev-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    /* sections below the hero */
+    .ev-section { margin-top: 36px; }
+    .ev-section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+      margin: 0 0 14px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .ev-section h2 .gp-ic { width: 15px; height: 15px; color: var(--brand); }
+    .ev-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+    .ev-card { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius-md); overflow: hidden;
+      text-decoration: none; color: inherit; box-shadow: var(--shadow-1);
+      transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease; }
+    .ev-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-2);
+      border-color: color-mix(in srgb, var(--brand) 30%, var(--hairline)); }
+    .ev-card .fr { background: #000; aspect-ratio: 4 / 3; }
+    .ev-card .fr img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ev-card .cap { padding: 9px 11px; font-size: 12px; }
+    .ev-card .cap .a { font-weight: 600; display: flex; align-items: center; gap: 5px; }
+    .ev-card .cap .t { color: var(--muted); margin-top: 3px; }
+    /* "around this moment" filmstrip */
+    .ev-strip { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; }
+    .ev-frame { flex: 0 0 132px; text-decoration: none; color: inherit; }
+    .ev-frame .fr { background: #000; aspect-ratio: 4 / 3; border-radius: var(--radius-md); overflow: hidden;
+      border: 1px solid var(--hairline); transition: outline-color .12s ease, transform .12s ease; }
+    .ev-frame:hover .fr { transform: translateY(-2px); }
+    .ev-frame.cur .fr { outline: 2px solid var(--brand); outline-offset: 1px; }
+    .ev-frame .fr img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ev-frame .t { font-size: 11px; color: var(--muted); margin-top: 5px; text-align: center;
+      font-variant-numeric: tabular-nums; }
+    .ev-frame.cur .t { color: var(--brand-link); font-weight: 700; }
+    /* feedback ("teach the garden") — a 3-way segmented control like the dashboard mode picker */
+    .ev-fb-sub { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; max-width: 620px; }
+    .ev-fb-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; max-width: 470px;
+      border: 1px solid var(--hairline); border-radius: var(--radius-md); overflow: hidden; background: var(--panel-2);
+      box-shadow: var(--shadow-1); }
+    .ev-fb-seg button { font: inherit; font-weight: 650; font-size: 13.5px; border: 0; border-radius: 0;
+      padding: 12px 8px; background: transparent; color: var(--muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      border-right: 1px solid var(--hairline); transition: background .12s ease, color .12s ease; }
+    .ev-fb-seg button:last-child { border-right: 0; }
+    .ev-fb-seg button:hover:not(:disabled) { background: var(--panel); color: var(--text); }
+    .ev-fb-seg button:disabled { cursor: default; opacity: .9; }
+    .ev-fb-seg button .gp-ic { width: 16px; height: 16px; }
+    .ev-fb-seg button.sel[data-fb="good"]    { background: var(--green-dim); color: var(--green-ink); box-shadow: inset 0 -3px 0 var(--green); }
+    .ev-fb-seg button.sel[data-fb="neutral"] { background: var(--panel); color: var(--text); box-shadow: inset 0 -3px 0 var(--muted); }
+    .ev-fb-seg button.sel[data-fb="bad"]     { background: var(--red-dim); color: var(--red-ink); box-shadow: inset 0 -3px 0 var(--red); }
+    .ev-fb-msg { font-size: 12.5px; color: var(--muted); margin-top: 10px; min-height: 16px; }
+    .ev-fb-msg.good { color: var(--green-ink); }
+    .ev-fb-msg.bad { color: var(--red-ink); }
+    .ev-fb-link { font-size: 12.5px; font-weight: 600; color: var(--brand-link); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <!--PORTAL_HEADER--><!-- brand + nav + controls come from the shared header partial -->
+  </header>
+
+  <main>
+    <div class="ev-top">
+      <a class="ev-back" id="ev-back" href="/history">&larr; Back to History</a>
+    </div>
+
+    <div id="ev-msg" class="ev-msg">Loading event…</div>
+    <article id="ev-article" style="display:none">
+      <div class="ev-hero">
+        <div class="ev-stage">
+          <a id="ev-img-link" href="#" target="_blank" rel="noopener" title="Open full image in a new tab">
+            <img id="ev-img" alt="Event photo">
+          </a>
+          <span id="ev-badge" class="ev-badge"></span>
+        </div>
+        <div class="ev-panel">
+          <div id="ev-headline" class="ev-headline"></div>
+          <div id="ev-when" class="ev-when"></div>
+          <div class="ev-conf">
+            <div class="lab"><span>Confidence</span><span id="ev-conf-pct">—</span></div>
+            <div class="ev-bar"><div id="ev-conf-bar"></div></div>
+          </div>
+          <div class="ev-facts" id="ev-facts"></div>
+          <div class="ev-note" id="ev-note"></div>
+          <div class="ev-actions">
+            <a class="btn btn-primary btn-sm" id="ev-tl" href="#"></a>
+            <a class="btn btn-sm" id="ev-open" href="#" target="_blank" rel="noopener"></a>
+            <button class="btn btn-sm" id="ev-prev" type="button"></button>
+            <button class="btn btn-sm" id="ev-next" type="button"></button>
+          </div>
+        </div>
+      </div>
+
+      <section class="ev-section" id="ev-fb-sec" style="display:none">
+        <h2><svg class="gp-ic" aria-hidden="true"><use href="#gp-sparkle"/></svg> Was this a real alarm?</h2>
+        <p class="ev-fb-sub">This frame triggered an alarm. Mark it <strong>real</strong>, <strong>unsure</strong>,
+          or a <strong>false alarm</strong> — your call teaches the garden what matters and tunes how sure it
+          must be before it acts. The camera keeps watching either way.</p>
+        <div class="ev-fb-seg" id="ev-fb" role="group" aria-label="Judge this alarm">
+          <button type="button" data-fb="good"><svg class="gp-ic" aria-hidden="true"><use href="#gp-check"/></svg> Real alarm</button>
+          <button type="button" data-fb="neutral"><svg class="gp-ic" aria-hidden="true"><use href="#gp-eye"/></svg> Unsure</button>
+          <button type="button" data-fb="bad"><svg class="gp-ic" aria-hidden="true"><use href="#gp-alert"/></svg> False alarm</button>
+        </div>
+        <div class="ev-fb-msg" id="ev-fb-msg"></div>
+        <p style="margin:10px 0 0"><a class="ev-fb-link" href="/alarms">See all alarms &rarr;</a></p>
+      </section>
+
+      <section class="ev-section" id="ev-batch-sec" style="display:none">
+        <h2 id="ev-batch-h2"></h2>
+        <div class="ev-gallery" id="ev-batch"></div>
+      </section>
+
+      <section class="ev-section" id="ev-strip-sec" style="display:none">
+        <h2></h2>
+        <div class="ev-strip" id="ev-strip"></div>
+      </section>
+    </article>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+    const params = new URLSearchParams(location.search);
+    const KEY = params.get("key") || "";
+    const REASON = params.get("reason") || "";        // optional passthrough from live surfaces
+    const camNameById = {};
+
+    function eventUrl(key) { return "/event?key=" + encodeURIComponent(key); }
+    function msOf(ev) { return ev ? Date.parse((ev.date || "") + "T" + (ev.time || "00:00:00") + "Z") : NaN; }
+    // Relative "x ago" — intentionally tz-independent (a duration, not a clock reading).
+    function ago(ms) {
+      if (!ms || isNaN(ms)) return "";
+      let s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+      if (s < 60) return s + "s ago";
+      let m = Math.round(s / 60); if (m < 60) return m + "m ago";
+      let h = Math.floor(m / 60); if (h < 48) return h + "h ago";
+      return Math.round(h / 24) + "d ago";
+    }
+    function hasBatch(ev) { return ev && ev.batch && ev.batch !== "none" && ev.batch !== ""; }
+    function realSpecies(ev) { return ev && ev.species && ev.species !== "none" && !String(ev.species).startsWith("class-"); }
+
+    // Plain-English account of what the garden did, from the key (action/species/confidence)
+    // plus an OPTIONAL veto reason passed through from the live dashboard (the key alone does
+    // not persist the reason).
+    function explain(ev) {
+      if (ev.action === "mitigate")
+        return "The deterrent fired — the sprinkler was triggered to move " + (realSpecies(ev) ? "the " + ev.species : "the intruder") + " along.";
+      if (REASON === "rain")
+        return "Spotted, but the spray was held off — rain was detected, so the garden let the weather do the work.";
+      if (REASON)
+        return "Spotted, but the spray was held off (" + esc(REASON) + ").";
+      if (realSpecies(ev))
+        return "Spotted and logged, but no spray — either below the action threshold or the garden was in monitor (watch-only) mode.";
+      return "All clear — a routine frame with nothing to deter.";
+    }
+
+    async function loadCameras() {
+      try {
+        const r = await fetch("/api/cameras", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        (j.cameras || []).forEach((c) => { camNameById[c.device_id] = c.name || c.device_id; });
+      } catch (e) {}
+    }
+    function camName(did) { return camNameById[did] || did; }
+
+    function fail(text) { $("ev-msg").textContent = text; $("ev-msg").style.display = "block"; $("ev-article").style.display = "none"; }
+
+    function renderHero(ev) {
+      const type = GP.archive.type(ev);
+      $("ev-img").src = GP.archive.imageUrl(ev.key);
+      $("ev-img").alt = GP.archive.caption(ev);
+      $("ev-img-link").href = GP.archive.imageUrl(ev.key);
+      $("ev-badge").className = "ev-badge " + type;
+      $("ev-badge").innerHTML = GP.archive.icon(ev) + " " + esc(type === "sprayed" ? "Deterrent fired" : type === "sighting" ? "Sighting" : "All clear");
+
+      $("ev-headline").className = "ev-headline " + type;
+      $("ev-headline").innerHTML = GP.archive.icon(ev) + " " + esc(GP.archive.caption(ev));
+      const ms = msOf(ev);
+      $("ev-when").textContent = GP.archive.localDate(ev, { weekday: "short", month: "short", day: "numeric" }) +
+        " · " + GP.archive.localTime(ev) + (ago(ms) ? "  (" + ago(ms) + ")" : "");
+
+      const pct = ev.confidence != null ? Number(ev.confidence) : null;
+      $("ev-conf-pct").textContent = pct != null ? pct + "%" : "—";
+      $("ev-conf-bar").style.width = (pct != null ? Math.max(0, Math.min(100, pct)) : 0) + "%";
+
+      const facts = [
+        ["Camera", esc(camName(ev.device))],
+        ["Species", esc(realSpecies(ev) ? ev.species : (ev.species === "none" ? "none" : ev.species + " (unlabeled)"))],
+        ["Action", esc(ev.action === "mitigate" ? "Sprayed" : "No spray")],
+        ["Local time", esc(GP.archive.localDate(ev, { month: "short", day: "numeric", year: "numeric" }) + " " + GP.archive.localTime(ev))],
+        ["Captured (UTC)", esc(ev.date + " " + ev.time)],
+        ["Multi-angle set", hasBatch(ev) ? "Yes" : "Single frame"],
+        ["Trace id", '<span class="mono">' + esc(ev.cid || "—") + "</span>"],
+      ];
+      $("ev-facts").innerHTML = facts.map(function (f) {
+        return '<div class="ev-fact"><div class="k">' + f[0] + '</div><div class="v' +
+          (f[0] === "Trace id" ? "" : "") + '">' + f[1] + "</div></div>";
+      }).join("");
+
+      $("ev-note").innerHTML = GP.svgUse("gp-info") + " <div>" + esc(explain(ev)) + "</div>";
+
+      $("ev-open").innerHTML = GP.svgUse("gp-upload") + " Open full image";
+      $("ev-open").href = GP.archive.imageUrl(ev.key);
+
+      // "Watch the timelapse around this moment" — reuse the existing /timelapse deep-link
+      // contract (cam + date window + start key seats the scrubber on this frame). Widen the
+      // window by a day on each side so the frame is in range regardless of the viewer's zone.
+      const tlUrl = "/timelapse?" + new URLSearchParams({
+        cam: ev.device, from: dayShift(ev.date, -1), to: dayShift(ev.date, 1), start: ev.key
+      }).toString();
+      $("ev-tl").href = tlUrl;
+      $("ev-tl").innerHTML = GP.svgUse("gp-play") + " Watch timelapse around this moment";
+    }
+
+    function dayShift(ymd, delta) {
+      const p = String(ymd).split("-"); if (p.length !== 3) return ymd;
+      const d = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
+      d.setUTCDate(d.getUTCDate() + delta);
+      return d.toISOString().slice(0, 10);
+    }
+
+    // Other camera angles captured in the SAME tick (shared batch id).
+    function renderBatch(ev, dayEvents) {
+      if (!hasBatch(ev)) return;
+      const mates = dayEvents.filter((e) => e.batch === ev.batch && e.key !== ev.key)
+        .sort((a, b) => camName(a.device).localeCompare(camName(b.device)));
+      if (!mates.length) return;
+      $("ev-batch-h2").innerHTML = GP.svgUse("gp-camera") + " Other angles of this moment (" + mates.length + ")";
+      $("ev-batch").innerHTML = mates.map((e) =>
+        '<a class="ev-card" href="' + eventUrl(e.key) + '">' +
+          '<div class="fr"><img loading="lazy" src="' + GP.archive.imageUrl(e.key) + '" alt=""></div>' +
+          '<div class="cap"><div class="a">' + GP.svgUse("gp-camera") + " " + esc(camName(e.device)) + "</div>" +
+            '<div class="t">' + esc(GP.archive.localTime(e)) + "</div></div>" +
+        "</a>").join("");
+      $("ev-batch-sec").style.display = "block";
+    }
+
+    // A filmstrip of this camera's frames around the event, + prev/next wiring.
+    function renderStrip(ev, dayEvents) {
+      const mine = dayEvents.filter((e) => e.device === ev.device)
+        .sort((a, b) => { const ka = GP.archive.stamp(a), kb = GP.archive.stamp(b); return ka < kb ? -1 : ka > kb ? 1 : 0; });
+      const idx = mine.findIndex((e) => e.key === ev.key);
+
+      const prev = idx > 0 ? mine[idx - 1] : null;            // older
+      const next = idx >= 0 && idx < mine.length - 1 ? mine[idx + 1] : null;  // newer
+      wireNav($("ev-prev"), prev, "gp-step", "Older", true);
+      wireNav($("ev-next"), next, "gp-step", "Newer", false);
+
+      if (mine.length < 2 || idx < 0) return;
+      const lo = Math.max(0, idx - 5), hi = Math.min(mine.length, idx + 6);
+      const win = mine.slice(lo, hi);
+      $("ev-strip-sec").querySelector("h2").innerHTML = GP.svgUse("gp-eye") + " " + esc(camName(ev.device)) + " around this time";
+      $("ev-strip").innerHTML = win.map((e) =>
+        '<a class="ev-frame' + (e.key === ev.key ? " cur" : "") + '" href="' + eventUrl(e.key) + '">' +
+          '<div class="fr"><img loading="lazy" src="' + GP.archive.imageUrl(e.key) + '" alt=""></div>' +
+          '<div class="t">' + esc(GP.archive.localTime(e)) + "</div></a>").join("");
+      $("ev-strip-sec").style.display = "block";
+      // Center the current frame in the strip.
+      const cur = $("ev-strip").querySelector(".ev-frame.cur");
+      if (cur) cur.scrollIntoView({ block: "nearest", inline: "center" });
+    }
+
+    // "Was this a real alarm?": the good/neutral/bad determination toggle, shown ONLY when this
+    // frame is an alarm (a trigger device flagged it). Tagging a NEW (untagged) alarm is open to
+    // any viewer; CHANGING an existing tag is an admin action (the edge enforces it + 403s a
+    // viewer). On the public edge the page is view-only, so a viewer = add-only; the Pi admin
+    // portal (GP_VIEW_ONLY=false) can change. Wired once (guarded) so the tz re-render doesn't
+    // double-bind — this section has no timestamps to re-localize.
+    function fbLabelText(l) { return l === "good" ? "Real alarm" : l === "bad" ? "False alarm" : "Unsure"; }
+    async function renderFeedback(ev) {
+      const sec = $("ev-fb-sec"), seg = $("ev-fb"), msg = $("ev-fb-msg");
+      if (!sec || !seg || sec.dataset.fbReady) return;
+      sec.dataset.fbReady = "1";                       // claim BEFORE the await so a gp:tzchange
+      const alarm = await GP.alarmForKey(ev.key);      // mid-fetch can't pass the guard + double-bind
+      if (!alarm) return;                              // not an alarm -> leave hidden (flag stays set)
+      const admin = !window.GP_VIEW_ONLY;
+      const btns = Array.prototype.slice.call(seg.querySelectorAll("button[data-fb]"));
+      let current = alarm.tag || null;
+
+      function paint() {
+        const locked = !!current && !admin;          // a viewer can't change a prior determination
+        btns.forEach((b) => { b.classList.toggle("sel", b.dataset.fb === current); b.disabled = locked; });
+        if (locked) { msg.className = "ev-fb-msg good"; msg.textContent = "Recorded as “" + fbLabelText(current) + ".” An admin can change this."; }
+        else if (current) { msg.className = "ev-fb-msg"; msg.textContent = "Marked “" + fbLabelText(current) + ".” Tap another to change it."; }
+        else { msg.className = "ev-fb-msg"; msg.textContent = ""; }
+      }
+
+      btns.forEach((b) => b.addEventListener("click", async () => {
+        const label = b.dataset.fb;
+        if (label === current) return;
+        btns.forEach((x) => { x.disabled = true; });
+        try {
+          await GP.alarmTag(alarm.id, label);
+          current = label;
+          paint();
+        } catch (e) {
+          msg.className = "ev-fb-msg bad";
+          msg.textContent = e.status === 403 ? "Already judged — only an admin can change this."
+            : e.status === 401 ? "Please sign in to judge this alarm."
+            : "Couldn’t save that — please try again.";
+          paint();   // re-derives the disabled state (leaves buttons enabled for a retry if unlocked)
+        }
+      }));
+
+      paint();
+      sec.style.display = "block";
+    }
+
+    function wireNav(btn, target, icon, label, isPrev) {
+      const ic = GP.svgUse(icon);
+      btn.innerHTML = isPrev ? ic.replace("<svg", '<svg style="transform:scaleX(-1)"') + " " + label : label + " " + ic;
+      if (target) { btn.disabled = false; btn.onclick = () => { location.href = eventUrl(target.key); }; }
+      else { btn.disabled = true; btn.onclick = null; btn.style.opacity = ".45"; btn.style.cursor = "default"; }
+    }
+
+    async function init() {
+      if (!KEY) { fail("No event was specified. Open an event from the dashboard, History, or Timelapse."); return; }
+      const ev = GP.archive.parseKey(KEY);
+      if (!ev) { fail("That event link is not valid or the photo is no longer in the archive."); return; }
+
+      await loadCameras();
+      $("ev-msg").style.display = "none";
+      $("ev-article").style.display = "block";
+      renderHero(ev);
+      renderFeedback(ev);   // "teach the garden" judgment toggle (guarded; wires once)
+
+      // One day-fetch powers BOTH the multi-angle set and the neighbor strip.
+      let dayEvents = [];
+      try { dayEvents = await GP.archive.eventsForDay(ev.date, 3000); } catch (e) {}
+      renderBatch(ev, dayEvents);
+      renderStrip(ev, dayEvents);
+    }
+
+    // Re-render labels (local date/time) when the viewer switches display zone.
+    document.addEventListener("gp:tzchange", function () { init(); });
+    init();
+  </script>
+</body>
+</html>

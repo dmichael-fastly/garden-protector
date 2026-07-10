@@ -1,0 +1,21 @@
+# .gitleaks.toml — secret-scan config for `make scan`, `make ci`, and the
+# .githooks/pre-commit hook. Auto-discovered by gitleaks when run from the repo
+# root. See CHARTER.md / AGENTS.md "Secrets and Sensitive Data".
+#
+# We extend gitleaks' built-in ruleset rather than replace it. The repo's live
+# secrets (FOS keys, cdn_secret, the Fastly admin token, per-device Pi tokens) live
+# under configs/, which is gitignored and therefore never seen by `gitleaks git`
+# (it scans tracked content only). History + tree are audited clean, so there are
+# no project allowlist entries.
+#
+# To allowlist a genuine false positive later, add an [[allowlists]] block with at
+# least one check (gitleaks requires one of: commits / paths / regexes / stopwords)
+# and a justifying comment — never to suppress a real credential. Example:
+#
+#   [[allowlists]]
+#   description = "test fixtures are public-safe sample data"
+#   paths = ['''tests/fixtures/.*''']
+title = "garden-protector"
+
+[extend]
+useDefault = true

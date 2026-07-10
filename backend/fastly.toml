@@ -1,0 +1,69 @@
+manifest_version = 3
+name = "garden-protector-backend"
+description = "Garden Protector Edge IoT Security Controller"
+authors = ["Antigravity <antigravity@gemini.google.com>"]
+language = "rust"
+
+[local_server]
+  [local_server.kv_stores]
+    [[local_server.kv_stores.garden_models]]
+      key = "mobilenet_v2.onnx"
+      file = "../tests/kv_store/mobilenet_v2.onnx"
+
+    # Writable mutable state for the admin dashboard. Config Store is read-only at
+    # the edge, so arm/override flags + the latest event/snapshot live in KV.
+    # Seeded with safe defaults so reads work before the first write. Viceroy keeps
+    # runtime inserts in memory for the serve session (NOT persisted on restart).
+    # Production note: real Fastly needs `fastly kv-store create garden_state` plus
+    # a resource link in the service; this block only configures local Viceroy.
+    [[local_server.kv_stores.garden_state]]
+      key = "armed"
+      data = "true"
+    [[local_server.kv_stores.garden_state]]
+      key = "override_stop"
+      data = "false"
+
+  # Per-garden auth tokens (Step 3, RFC §5). Secret names use the slash-free
+  # encoding `g.<gid>.token_current|token_previous` (Fastly secret names forbid
+  # `/`). The `default` garden is intentionally ABSENT (tokenless — local dev and
+  # the single-tenant trip path stay unauthenticated). `backyard` is seeded so the
+  # Viceroy auth + cross-garden-replay smoke tests work. Production needs
+  # `fastly secret-store create garden_tokens` + a service resource link; this
+  # block only configures local Viceroy. Viceroy keeps these in memory per session.
+  [local_server.secret_stores]
+    [[local_server.secret_stores.garden_tokens]]
+      key = "g.backyard.token_current"
+      data = "s3cr3t-token"
+    [[local_server.secret_stores.garden_tokens]]
+      key = "g.backyard.viewer_pass"
+      data = "viewerpassword"
+    # A second provisioned garden with a DIFFERENT token, so the cross-garden
+    # replay guard is demonstrable: backyard's token presented for frontyard must
+    # be rejected (frontyard's secret resolves to a different value). An
+    # UNprovisioned garden (no entry here) is tokenless/open by design
+    # (enforce-iff-token) — it has no real data to protect.
+    [[local_server.secret_stores.garden_tokens]]
+      key = "g.frontyard.token_current"
+      data = "front-token"
+
+  [local_server.config_stores]
+    [local_server.config_stores.device_config]
+      # In-line configuration properties for our local mock tests
+      format = "inline-toml"
+      [local_server.config_stores.device_config.contents]
+        twilio_sid = "ACmock_sid"
+        twilio_auth_token = "mock_auth_token"
+        to_phone = "+15551234567"
+        from_phone = "+15557654321"
+        is_armed = "true"
+        override_stop = "false"
+
+    # This service's OWN garden id, the fallback for a header-less (browser)
+    # request — see `read_default_garden_id`. Set to a NAMED garden so `fastly
+    # compute serve` exercises the dedicated-per-garden path (a browser resolves
+    # to "backyard", not "default"). gp-provision creates `garden_config_<sid>`
+    # with the real garden id per service; absent store -> "default".
+    [local_server.config_stores.garden_config]
+      format = "inline-toml"
+      [local_server.config_stores.garden_config.contents]
+        default_garden_id = "backyard"

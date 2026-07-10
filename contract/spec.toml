@@ -1,0 +1,179 @@
+# contract/spec.toml — the SINGLE SOURCE of truth for the cross-language identity /
+# key / token / header / threshold contract shared by the Rust edge
+# (backend/src/main.rs) and the Python tiers (provision/, hardware/).
+#
+# `make gen` renders this into:
+#   * backend/src/contract_gen.rs   (Rust consts + pure fns)
+#   * provision/contract_gen.py     (Python consts + pure fns)
+#   * tests/contract_fixture.json   (expected outputs, for the conformance test)
+# All three carry a "GENERATED — do not edit" header. Edit values HERE, run
+# `make gen`, commit. `make gen-check` (in `make ci`) fails the build if the
+# checked-in generated files drift from this spec — that is the drift gate.
+#
+# Before this spec, these values were hand-copied into both languages and the only
+# guard was a literal-string test each side wrote separately, so a format change in
+# one language was silent in the other (see CHARTER "one identity/contract source").
+
+[identity]
+# The garden whose state lives at LEGACY FLAT keys and which is NEVER issued a token
+# (tokenless single-tenant / local dev). Renaming it would require a KV migration.
+default_garden = "default"
+# Tenancy/device/node id charset + length. Excluding "/" is LOAD-BEARING: it blocks a
+# device_id="../armed" cross-tenant key collision. Charset is rendered to a Python
+# regex and a Rust byte-check; supported tokens: ranges "a-z"/"A-Z"/"0-9" and literals.
+id_charset = ["a-z", "0-9", "-"]
+id_min_len = 1
+id_max_len = 64
+
+[token]
+# Fastly Secret-Store names allow only [A-Za-z0-9._-] (NO "/"), so the token secret
+# name uses "." as the delimiter: <prefix><delim><gid><delim><slot>. The gid charset
+# has no ".", so "g.<gid>.token_current" is unambiguous.
+secret_prefix = "g"
+secret_delimiter = "."
+slot_current = "token_current"
+slot_previous = "token_previous"
+
+[kv]
+# garden_state key grammar. The `default` garden keeps LEGACY FLAT keys; any other
+# garden namespaces under g/<gid>/...  (flag) and g/<gid>/dev/<did>/... (per-device).
+garden_prefix = "g"   # g/<gid>/<name>
+dev_segment = "dev"   # g/<gid>/dev/<did>/<name>
+
+[headers]
+# The identity + trace headers carried Pi->edge (and node->Pi for the first three).
+garden_id = "X-Garden-Id"
+device_id = "X-Device-Id"
+node_id = "X-Node-Id"
+trace_id = "X-Garden-Trace-Id"
+auth = "X-Garden-Auth"
+# Evidence-push correlation (Pi->edge, both OPTIONAL — the edge falls back to its own
+# clock + no-batch when absent, so older Pis keep working). capture_ts is the unix-second
+# moment the Pi captured the frame; the edge stamps the archive object key with it (not
+# its own receive time) so all of a tick's cameras share ONE timeline timestamp. The
+# capture_batch id is identical across every camera pushed in the same tick, so the
+# History/timelapse UI can render them as one multi-angle set.
+capture_ts = "X-Capture-Ts"
+capture_batch = "X-Capture-Batch"
+# Alarm trigger marker (Pi->edge, OPTIONAL). Present only on a push that represents a
+# genuine trigger EVENT (e.g. a camera's confirmed motion, or later a radar detection) —
+# its value is a short human reason ("motion 4.2% x3"). The edge creates an alarm only when
+# the device has the can_trigger_alarm role AND this marker is present, so a trigger camera's
+# routine cadence frames (no marker) stay History-only and never flood the alarm log.
+trigger = "X-Trigger"
+
+[thresholds]
+# A node is OFFLINE if its last telemetry beat is older than this (edge + gateway).
+node_offline_after_secs = 150
+# Rain telemetry older than this is ignored by the rain veto (edge + gateway).
+rain_telemetry_fresh_secs = 600
+# Minimum top-1 softmax probability to act on a detection (edge classifier).
+mitigate_threshold = 0.30
+
+[archive]
+# Evidence object keys embed a zero-padded (seconds_per_day - seconds_of_day) token so
+# lexical-ascending == chronological-DESCENDING (newest-first paging without max-keys).
+seconds_per_day = 86400
+
+[control]
+# The dashboard control commands (edge handle_control; the Python consoles validate
+# against this same set before proxying). THREE-MODE model + per-event smart Stop:
+#   off / disarm  -> armed=false (mode OFF)
+#   monitor       -> armed=true,  override_stop=true  (mode MONITOR — watch+alert+log,
+#                    NEVER spray; the "Log mode")
+#   active / arm  -> armed=true,  override_stop=false (mode ACTIVE — watch+spray)
+#   stop          -> one-shot abort of the LIVE spray (sets abort_cid=last_mitigate_cid);
+#                    does NOT change mode; auto-resumes on the next mitigate decision
+#   resume        -> clear abort_cid (manual un-abort; usually unnecessary)
+# `arm`/`disarm` are kept as ACTIVE/OFF aliases for back-compat (older Pi consoles +
+# the gp.js transition). Unknown command -> HTTP 400.
+commands = ["off", "monitor", "active", "stop", "resume", "arm", "disarm"]
+
+[ui]
+# The shared web UI contract, rendered into both tiers by `make gen` so the nav model
+# and the asset cache-bust can NEVER drift between the Rust edge and the Python portal.
+#
+# asset_version: the ?v= stamped on /static/gp.css + /static/gp.js (and every page that
+# links them). Bump on any gp.css/gp.js change; gen propagates it everywhere. (The CDN
+# in front of the edge still needs a purge_all after deploy — it ignores ?v= on /static.)
+asset_version = "31"
+
+# nav: the ONE nav model. Both tiers render it server-side via render_nav(); links with
+# viewer_ok=false are OMITTED (not merely hidden) when a page is served view-only (the
+# public edge), so admin destinations never reach viewers. The rendered link id is
+# "nav-<id>" and `label` is user-facing — keep it friendly (e.g. "Gadgets", not "Devices").
+[[ui.nav]]
+id = "dashboard"
+href = "/"
+label = "Dashboard"
+viewer_ok = true
+
+[[ui.nav]]
+id = "history"
+href = "/history"
+label = "History"
+viewer_ok = true
+
+[[ui.nav]]
+id = "timelapse"
+href = "/timelapse"
+label = "Timelapse"
+viewer_ok = true
+
+# Alarms: real + false alarms (triggers → determinations) + per-species tuning recommendations.
+# Viewer-visible (viewer_ok = true) so household members can see and tag alarms; tagging a NEW
+# alarm is open to viewers, while editing/deleting prior ones + the cleanup controls are gated
+# server-side (a valid garden token = admin), not by the nav.
+[[ui.nav]]
+id = "alarms"
+href = "/alarms"
+label = "Alarms"
+viewer_ok = true
+
+# The admin-only destinations are grouped under a single "Admin" dropdown in the nav
+# (render_nav emits a <details> menu for any contiguous run of items sharing a `group`),
+# so the bar stays short. They're all viewer_ok=false, so on the view-only edge the group
+# is empty and the dropdown is omitted entirely. The group label is the capitalized id.
+[[ui.nav]]
+id = "devices"
+href = "/devices"
+label = "Gadgets"
+viewer_ok = false
+group = "admin"
+
+[[ui.nav]]
+id = "settings"
+href = "/settings"
+label = "Settings"
+viewer_ok = false
+group = "admin"
+
+[[ui.nav]]
+id = "costs"
+href = "/costs"
+label = "Costs"
+viewer_ok = false
+group = "admin"
+
+[[ui.nav]]
+id = "logs"
+href = "/logs"
+label = "Logs"
+viewer_ok = false
+group = "admin"
+
+[[ui.nav]]
+id = "storage"
+href = "/storage"
+label = "Storage"
+viewer_ok = false
+group = "admin"
+
+# Help: the shared setup/how-it-works guide. Visible to BOTH viewers and admins
+# (viewer_ok = true) so anyone can learn how protection works + set up a Garden Node.
+# Placed LAST so it renders as the rightmost nav item for both viewers and admins.
+[[ui.nav]]
+id = "help"
+href = "/help"
+label = "Help"
+viewer_ok = true
