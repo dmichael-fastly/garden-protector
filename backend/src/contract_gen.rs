@@ -22,9 +22,7 @@ pub const RAIN_TELEMETRY_FRESH_SECS: u64 = 600;
 pub const MITIGATE_THRESHOLD: f32 = 0.3_f32;
 pub const SECONDS_PER_DAY: u32 = 86400;
 
-pub const CONTROL_COMMANDS: [&str; 7] = [
-    "off", "monitor", "active", "stop", "resume", "arm", "disarm",
-];
+pub const CONTROL_COMMANDS: [&str; 7] = ["off", "monitor", "active", "stop", "resume", "arm", "disarm"];
 
 pub const ASSET_VERSION: &str = "31";
 
@@ -46,9 +44,7 @@ pub const NAV: [(&str, &str, &str, bool, &str); 10] = [
 /// Tenancy/device/node id validity (charset a-z0-9-, len 1..=64).
 pub fn is_valid_id(s: &str) -> bool {
     let n = s.len();
-    (ID_MIN_LEN..=ID_MAX_LEN).contains(&n)
-        && s.bytes()
-            .all(|b| (b'a'..=b'z').contains(&b) || (b'0'..=b'9').contains(&b) || b == b'-')
+    (ID_MIN_LEN..=ID_MAX_LEN).contains(&n) && s.bytes().all(|b| (b'a'..=b'z').contains(&b) || (b'0'..=b'9').contains(&b) || b == b'-')
 }
 
 /// garden_state KV key for a garden-level flag (default -> legacy flat key).
@@ -87,15 +83,8 @@ pub fn render_nav(active_id: &str, view_only: bool) -> String {
         if group.is_empty() {
             if !(view_only && !viewer_ok) {
                 let full = format!("nav-{}", nid);
-                let cls = if active_id == full.as_str() {
-                    " class=\"active\""
-                } else {
-                    ""
-                };
-                out.push(format!(
-                    "  <a href=\"{}\" id=\"{}\"{}>{}</a>",
-                    href, full, cls, label
-                ));
+                let cls = if active_id == full.as_str() { " class=\"active\"" } else { "" };
+                out.push(format!("  <a href=\"{}\" id=\"{}\"{}>{}</a>", href, full, cls, label));
             }
             i += 1;
             continue;
@@ -112,9 +101,7 @@ pub fn render_nav(active_id: &str, view_only: bool) -> String {
             continue;
         }
         let gid = format!("nav-{}", group);
-        let gactive = run
-            .iter()
-            .any(|it| active_id == format!("nav-{}", it.0).as_str());
+        let gactive = run.iter().any(|it| active_id == format!("nav-{}", it.0).as_str());
         let gcls = if gactive { " active" } else { "" };
         let mut gchars = group.chars();
         let glabel = match gchars.next() {
@@ -127,15 +114,8 @@ pub fn render_nav(active_id: &str, view_only: bool) -> String {
         ));
         for it in &run {
             let full = format!("nav-{}", it.0);
-            let cls = if active_id == full.as_str() {
-                " class=\"active\""
-            } else {
-                ""
-            };
-            out.push(format!(
-                "    <a href=\"{}\" id=\"{}\"{}>{}</a>",
-                it.1, full, cls, it.2
-            ));
+            let cls = if active_id == full.as_str() { " class=\"active\"" } else { "" };
+            out.push(format!("    <a href=\"{}\" id=\"{}\"{}>{}</a>", it.1, full, cls, it.2));
         }
         out.push("  </div></details>".to_string());
     }
@@ -149,18 +129,9 @@ mod gen_tests {
     fn test_generated_contract_matches_spec() {
         assert_eq!(key(DEFAULT_GARDEN, "armed"), "armed");
         assert_eq!(key("backyard", "armed"), "g/backyard/armed");
-        assert_eq!(
-            dev_key(DEFAULT_GARDEN, "cam1", "latest_event"),
-            "latest_event"
-        );
-        assert_eq!(
-            dev_key("backyard", "cam1", "latest_event"),
-            "g/backyard/dev/cam1/latest_event"
-        );
-        assert_eq!(
-            token_secret_name("backyard", TOKEN_SLOT_CURRENT),
-            "g.backyard.token_current"
-        );
+        assert_eq!(dev_key(DEFAULT_GARDEN, "cam1", "latest_event"), "latest_event");
+        assert_eq!(dev_key("backyard", "cam1", "latest_event"), "g/backyard/dev/cam1/latest_event");
+        assert_eq!(token_secret_name("backyard", TOKEN_SLOT_CURRENT), "g.backyard.token_current");
         assert!(is_valid_id("backyard") && is_valid_id("g-1"));
         assert!(!is_valid_id("") && !is_valid_id("g/1") && !is_valid_id("Cafe"));
         assert!(!token_secret_name("g1", TOKEN_SLOT_CURRENT).contains('/'));
@@ -168,10 +139,7 @@ mod gen_tests {
         assert_eq!(RAIN_TELEMETRY_FRESH_SECS, 600);
         assert_eq!(MITIGATE_THRESHOLD, 0.3_f32);
         assert_eq!(SECONDS_PER_DAY, 86400);
-        assert_eq!(
-            CONTROL_COMMANDS,
-            ["off", "monitor", "active", "stop", "resume", "arm", "disarm"]
-        );
+        assert_eq!(CONTROL_COMMANDS, ["off", "monitor", "active", "stop", "resume", "arm", "disarm"]);
         assert_eq!(HEADER_GARDEN_ID, "X-Garden-Id");
         assert_eq!(HEADER_DEVICE_ID, "X-Device-Id");
         assert_eq!(HEADER_NODE_ID, "X-Node-Id");
